@@ -1,0 +1,25 @@
+# Edit this file or pass another YAML file with --config.
+model:
+  id: sentence-transformers/all-MiniLM-L6-v2
+  revision: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41
+  device: cpu
+  local_files_only: true
+  trust_remote_code: false
+  document_prompt: ""
+  query_prompt: ""
+  normalize: true
+  truncate_dim: null
+  max_tokens: null  # null uses the model's actual sequence limit
+  token_margin: 8
+  batch_size: 16
+store:
+  mode: local
+  path: data/vector_store
+  # For a Qdrant server, use mode: remote and url: http://localhost:6333
+  url: null
+  api_key_env: null
+  registry_path: data/vector_indexes
+index:
+  collection_prefix: manuora
+  distance: cosine
+  upsert_batch_size: 32

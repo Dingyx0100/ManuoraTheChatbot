@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "manuora"
+version = "0.1.0"
+description = "Self-hosted product-support assistant"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "PyYAML",
+    "uvicorn",
+]
+
+[project.optional-dependencies]
+generation = [
+    "langchain-openai==1.7.2",
+    "langchain-core==1.6.12",
+    "langgraph==1.2.18",
+    "langgraph-checkpoint-sqlite==3.1.2",
+]
+ingestion = [
+    "docling==2.139.0",
+    "pypdfium2>=5.14,<6",
+]
+geometry = [
+    "pdfplumber==0.11.9",
+]
+embeddings = [
+    "qdrant-client>=1.19,<2",
+    "sentence-transformers>=5.7,<6",
+]
+test = [
+    "httpx",
+    "pytest",
+]
+# Optional TF-IDF context router (conversation.context_router_method: tfidf).
+router = [
+    "numpy>=2,<3",
+    "scikit-learn>=1.7,<2",
+    "sentence-transformers>=5.7,<6",
+]
+
+[tool.setuptools]
+package-dir = {"" = "backend/src"}
+
+[tool.setuptools.packages.find]
+where = ["backend/src"]
+include = ["manuora*"]
+namespaces = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,24 @@
+# Pinned Qwen3 dense embedding space. Query prompt is supplied by the checkpoint.
+model:
+  id: Qwen/Qwen3-Embedding-0.6B
+  revision: 97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3
+  device: cpu
+  local_files_only: true
+  trust_remote_code: false
+  document_prompt: ""
+  query_prompt_name: query
+  normalize: true
+  truncate_dim: null
+  max_tokens: 512
+  token_margin: 16
+  batch_size: 8
+store:
+  mode: remote
+  path: data/vector_store
+  url: http://127.0.0.1:6333
+  api_key_env: null
+  registry_path: data/vector_indexes
+index:
+  collection_prefix: manuora
+  distance: cosine
+  upsert_batch_size: 64

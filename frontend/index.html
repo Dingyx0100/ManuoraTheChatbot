@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manuora · Manual support</title>
+  <style>
+    :root { color-scheme: light; font: 15px/1.5 system-ui, Segoe UI, sans-serif; background:#f3f6f8; color:#172733; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; }
+    header { background:#102f3b; color:white; padding:18px max(24px, calc((100vw - 1100px)/2)); display:flex; align-items:center; gap:14px; }
+    .mark { background:#30b799; color:#092b32; width:36px; height:36px; display:grid; place-items:center; border-radius:11px; font-weight:800; }
+    h1 { font-size:19px; margin:0; line-height:1.1; } header p { margin:3px 0 0; color:#b8d2d7; font-size:12px; }
+    main { max-width:1100px; padding:24px; margin:auto; display:grid; grid-template-columns:255px minmax(0,1fr); gap:20px; min-height:calc(100vh - 72px); }
+    aside, .workspace { background:white; border:1px solid #dbe5e9; border-radius:16px; box-shadow:0 8px 24px #17333a0a; }
+    aside { padding:20px; height:max-content; }
+    h2 { font-size:14px; margin:0 0 14px; }
+    label { display:block; font-size:12px; font-weight:700; color:#49626d; margin:16px 0 5px; }
+    select, textarea { width:100%; border:1px solid #cbd8dd; border-radius:9px; background:white; color:#172733; font:inherit; }
+    select { padding:9px; } select:focus, textarea:focus { outline:2px solid #30b799; outline-offset:1px; }
+    .note { font-size:12px; color:#657983; margin-top:20px; }
+    .model-panel { margin-top:22px; padding-top:17px; border-top:1px solid #e3eaed; }
+    .model-panel p { font-size:12px; color:#49626d; margin:5px 0 10px; }
+    .model-controls { display:flex; gap:7px; flex-wrap:wrap; }
+    .model-controls button { font-size:12px; padding:8px 10px; }
+    .model-controls .secondary { background:#e6f1ef; color:#087d68; }
+    .workspace { display:flex; flex-direction:column; height:max(520px, calc(100vh - 120px)); min-height:0; overflow:hidden; position:relative; }
+    .topline { padding:18px 22px; border-bottom:1px solid #e3eaed; display:flex; justify-content:space-between; align-items:center; }
+    .topline strong { font-size:14px; } .topline span { font-size:12px; color:#6a7e88; }
+    #thread { flex:1; min-height:0; padding:22px; overflow-y:scroll; display:flex; flex-direction:column; gap:18px; scrollbar-color:#adc5cb #f3f6f8; scrollbar-width:thin; }
+    #thread::-webkit-scrollbar { width:10px; } #thread::-webkit-scrollbar-thumb { background:#adc5cb; border:2px solid #f3f6f8; border-radius:8px; }
+    .welcome { color:#536c76; margin:auto; max-width:420px; text-align:center; }
+    .message { max-width:86%; white-space:pre-wrap; line-height:1.6; }
+    .message.user { align-self:flex-end; background:#ddf4ed; border-radius:15px 15px 4px 15px; padding:12px 16px; }
+    .message.assistant { align-self:flex-start; background:#f3f6f8; border-radius:15px 15px 15px 4px; padding:14px 17px; }
+    .message.loading { display:flex; align-items:center; gap:10px; color:#49626d; }
+    .spinner { width:16px; height:16px; border:2px solid #bfd7d7; border-top-color:#159b7e; border-radius:50%; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    @media (prefers-reduced-motion:reduce) { .spinner { animation:none; } }
+    .sources { align-self:stretch; display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px; }
+    .source { border:1px solid #dbe5e9; border-radius:11px; padding:12px; color:#455e69; font-size:12px; }
+    .source strong { color:#172733; font-size:13px; } .source p { margin:6px 0; }
+    .source a { color:#087d68; font-weight:700; }
+    form { border-top:1px solid #e3eaed; padding:16px 20px; display:flex; gap:10px; align-items:end; }
+    textarea { resize:vertical; min-height:48px; max-height:180px; padding:11px 13px; }
+    button { border:0; border-radius:9px; background:#159b7e; color:white; font:inherit; font-weight:700; padding:12px 19px; cursor:pointer; }
+    #to-bottom { position:absolute; right:25px; bottom:116px; padding:8px 12px; border:1px solid #b9d8d2; background:white; color:#087d68; box-shadow:0 4px 14px #17333a20; font-size:12px; z-index:1; }
+    #to-bottom[hidden] { display:none; }
+    button:disabled { opacity:.55; cursor:wait; } #status { padding:0 22px 12px; color:#657983; font-size:12px; min-height:22px; }
+    @media (max-width:720px) { main { display:block; padding:12px; } aside { margin-bottom:12px; } .workspace { height:70vh; min-height:420px; } }
+  </style>
+</head>
+<body>
+  <header><div class="mark">M</div><div><h1>Manuora</h1><p>Answers grounded in your product manuals</p></div></header>
+  <main>
+    <aside>
+      <h2>Search scope</h2>
+      <label for="product">Product</label><select id="product"><option value="">All products</option></select>
+      <label for="version">Version</label><select id="version"><option value="">All versions</option></select>
+      <label for="document">Manual</label><select id="document"><option value="">All manuals</option></select>
+      <p class="note">Choose a product and version for precise support answers. Results include PDF page references you can inspect.</p>
+      <p class="note">Refresh keeps this conversation in the current tab. New chat starts a separate conversation. Unloading the model keeps its conversation memory.</p>
+      <button id="new-chat" type="button">New chat</button>
+      <div class="model-panel">
+        <h2>Generation model</h2>
+        <p id="model-state" role="status">Checking model status…</p>
+        <div class="model-controls"><button id="model-load" type="button" disabled>Load model</button><button id="model-unload" class="secondary" type="button" disabled>Unload model</button></div>
+        <p class="note">A support question also loads the model automatically. Unload it when finished to free GPU memory.</p>
+      </div>
+    </aside>
+    <section class="workspace" aria-label="Chat">
+      <div class="topline"><strong>Manual assistant</strong><span>Qwen retrieval · BM25 · reranker · Qwen3 generation</span></div>
+      <div id="thread"><div class="welcome">Ask a question about a manual. The answer and its source passages will appear here.</div></div>
+      <button id="to-bottom" type="button" hidden aria-label="Go to bottom of chat">↓ Latest</button>
+      <form id="chat-form"><textarea id="question" placeholder="How do I configure the mail server?" required></textarea><button id="send" type="submit">Send</button></form>
+      <div id="status" role="status"></div>
+    </section>
+  </main>
+  <script>
+    const product = document.querySelector('#product');
+    const version = document.querySelector('#version');
+    const documentSelect = document.querySelector('#document');
+    const thread = document.querySelector('#thread');
+    const question = document.querySelector('#question');
+    const button = document.querySelector('#send');
+    const toBottom = document.querySelector('#to-bottom');
+    const status = document.querySelector('#status');
+    const modelState = document.querySelector('#model-state');
+    const modelLoad = document.querySelector('#model-load');
+    const modelUnload = document.querySelector('#model-unload');
+    const newChat = document.querySelector('#new-chat');
+    const conversationKey = 'manuora.conversation.v1';
+    function freshConversation() { return {id:crypto.randomUUID(), exchanges:[]}; }
+    function restoreConversation() {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(conversationKey));
+        if (/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(saved?.id) &&
+            Array.isArray(saved.exchanges) && saved.exchanges.every(e =>
+              typeof e.question === 'string' && typeof e.answer === 'string' && Array.isArray(e.sources))) return saved;
+      } catch (_) { /* Missing/unavailable storage starts a fresh conversation. */ }
+      return freshConversation();
+    }
+    let conversation = restoreConversation();
+    function saveConversation() {
+      try { sessionStorage.setItem(conversationKey, JSON.stringify(conversation)); }
+      catch (_) { status.textContent = 'Browser storage is unavailable or full. Refresh may lose the visible conversation.'; }
+    }
+    saveConversation();
+    let documents = [];
+    let modelBusy = false;
+    let chatBusy = false;
+    let modelLoaded = false;
+    function updateModelButtons() {
+      modelLoad.disabled = modelBusy || chatBusy || modelLoaded;
+      modelUnload.disabled = modelBusy || chatBusy || !modelLoaded;
+    }
+    async function refreshModel() {
+      if (modelBusy || chatBusy) return;
+      try {
+        const response = await fetch('/api/model/status');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Status unavailable');
+        modelLoaded = data.loaded;
+        modelState.textContent = modelLoaded ? 'Loaded on this computer' : 'Unloaded from GPU';
+        updateModelButtons();
+      } catch (error) {
+        modelState.textContent = `Model status unavailable: ${error.message}`;
+        modelLoad.disabled = true; modelUnload.disabled = true;
+      }
+    }
+    async function controlModel(action) {
+      modelBusy = true; updateModelButtons();
+      modelState.textContent = action === 'load' ? 'Loading model…' : 'Unloading model…';
+      try {
+        const response = await fetch(`/api/model/${action}`, {method:'POST'});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Model action failed');
+        modelLoaded = data.loaded;
+        modelState.textContent = modelLoaded ? 'Loaded on this computer' : 'Unloaded from GPU';
+      } catch (error) { modelState.textContent = `Model action failed: ${error.message}`; }
+      finally { modelBusy = false; updateModelButtons(); }
+    }
+    modelLoad.addEventListener('click', () => controlModel('load'));
+    modelUnload.addEventListener('click', () => controlModel('unload'));
+    refreshModel();
+    setInterval(refreshModel, 15000);
+    const unique = values => [...new Set(values.filter(Boolean))].sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
+    function fill(select, values, allLabel) {
+      const previous = select.value;
+      select.replaceChildren(new Option(allLabel, ''), ...values.map(value => new Option(value, value)));
+      if (values.includes(previous)) select.value = previous;
+    }
+    function updateScope() {
+      fill(version, unique(documents.filter(d => !product.value || d.product_id === product.value).map(d => d.product_version)), 'All versions');
+      fill(documentSelect, unique(documents.filter(d => (!product.value || d.product_id === product.value) && (!version.value || d.product_version === version.value)).map(d => d.document_id)), 'All manuals');
+    }
+    product.addEventListener('change', updateScope);
+    version.addEventListener('change', updateScope);
+    fetch('/api/options').then(r => r.json()).then(data => {
+      documents = data.documents;
+      fill(product, unique(documents.map(d => d.product_id)), 'All products');
+      updateScope();
+    }).catch(() => { status.textContent = 'Could not load manual filters.'; });
+    const nearBottom = () => thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80;
+    function updateBottomButton() { toBottom.hidden = nearBottom(); }
+    thread.addEventListener('scroll', updateBottomButton);
+    toBottom.addEventListener('click', () => thread.scrollTo({top:thread.scrollHeight, behavior:'smooth'}));
+    function addMessage(text, kind, forceScroll = false) {
+      const shouldScroll = forceScroll || nearBottom();
+      thread.querySelector('.welcome')?.remove();
+      const item = document.createElement('div');
+      item.className = `message ${kind}`;
+      item.textContent = text;
+      thread.append(item);
+      if (shouldScroll) thread.scrollTop = thread.scrollHeight;
+      updateBottomButton();
+      return item;
+    }
+    function addSources(sources) {
+      if (!sources.length) return;
+      const shouldScroll = nearBottom();
+      const grid = document.createElement('div');
+      grid.className = 'sources';
+      for (const source of sources) {
+        const card = document.createElement('div'); card.className = 'source';
+        const title = document.createElement('strong');
+        title.textContent = `[${source.citation}] ${source.document_id} · PDF p. ${source.pages.join(', ')}`;
+        card.append(title);
+        const heading = document.createElement('p'); heading.textContent = source.headings.join(' / '); card.append(heading);
+        const excerpt = document.createElement('p'); excerpt.textContent = source.preview || 'Source retained from the previous answer.'; card.append(excerpt);
+        const link = document.createElement('a');
+        const params = new URLSearchParams({product_id:source.product_id, product_version:source.product_version || '', document_id:source.document_id});
+        link.href = `/api/source?${params}#page=${source.pages[0] || 1}`;
+        link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'Open source PDF'; card.append(link);
+        grid.append(card);
+      }
+      thread.append(grid);
+      if (shouldScroll) thread.scrollTop = thread.scrollHeight;
+      updateBottomButton();
+    }
+    for (const exchange of conversation.exchanges) {
+      addMessage(exchange.question, 'user');
+      addMessage(exchange.answer, 'assistant');
+      addSources(exchange.sources);
+    }
+    thread.scrollTop = thread.scrollHeight;
+    updateBottomButton();
+    newChat.addEventListener('click', () => {
+      if (chatBusy) return;
+      conversation = freshConversation();
+      thread.replaceChildren();
+      const welcome = document.createElement('div'); welcome.className = 'welcome';
+      welcome.textContent = 'Ask a question about a manual. The answer and its source passages will appear here.';
+      thread.append(welcome);
+      question.value = ''; status.textContent = 'New conversation started.';
+      saveConversation(); updateBottomButton(); question.focus();
+    });
+    document.querySelector('#chat-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const text = question.value.trim(); if (!text || chatBusy) return;
+      addMessage(text, 'user', true); question.value = ''; button.disabled = true;
+      chatBusy = true; newChat.disabled = true; updateModelButtons();
+      const loading = addMessage('Manuora is working…', 'assistant loading', true);
+      loading.setAttribute('role', 'status');
+      const spinner = document.createElement('span'); spinner.className = 'spinner'; spinner.setAttribute('aria-hidden', 'true');
+      loading.prepend(spinner);
+      status.textContent = 'Searching manuals, reranking passages, and generating an answer…';
+      try {
+        const response = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({question:text, product_id:product.value || null, product_version:version.value || null,
+            document_id:documentSelect.value || null, conversation_id:conversation.id})});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Request failed');
+        loading.remove(); addMessage(data.answer, 'assistant'); addSources(data.sources);
+        conversation.id = data.conversation_id;
+        conversation.exchanges.push({question:text, answer:data.answer, sources:data.sources});
+        status.textContent = `${data.sources.length} source passages reviewed`;
+        saveConversation();
+      } catch (error) { loading.remove(); addMessage(`Sorry, the request failed: ${error.message}`, 'assistant'); status.textContent = 'Request failed'; }
+      finally { button.disabled = false; chatBusy = false; newChat.disabled = false; refreshModel(); question.focus(); }
+    });
+    question.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.querySelector('#chat-form').requestSubmit(); }
+    });
+  </script>
+</body>
+</html>

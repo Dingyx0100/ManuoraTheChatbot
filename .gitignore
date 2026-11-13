@@ -1,0 +1,34 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Local data: manuals, parsed output, indexes, models, evaluation runs, chat history
+data/
+*.sqlite
+*.sqlite-journal
+
+# Local-only manuals: settings, tests and benchmark cases that must never be published
+config/local.yaml
+tests/private/
+
+# Research material kept locally, not part of the app
+experiments/
+EXPERIMENTS.md
+archive/
+docs/
+tmp/
+
+# Secrets and editor/OS files
+.env
+.env.*
+.vscode/
+.idea/
+.claude/
+Thumbs.db
+.DS_Store
