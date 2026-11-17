@@ -208,6 +208,10 @@ class ManuoraGraphGenerator:
             raise ValueError("Question and instructions exceed the configured context budget")
         return render(selected), len(selected)
 
+    def packed_count(self, question: str, hits: list) -> int:
+        """How many ranked passages a fresh conversation's prompt would hold (no model call)."""
+        return self._prepare_evidence(question, hits, False)[1]
+
     def _summary_prompt(self, summary: str, text: str) -> list:
         return [HumanMessage(content=(
             "Update the conversation summary for a product-support assistant. "

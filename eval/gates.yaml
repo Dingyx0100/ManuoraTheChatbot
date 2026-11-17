@@ -1,0 +1,20 @@
+# Release gate: a candidate run is compared with eval/baseline.json on the cases both have scored
+# (public cases only, same split and tier). Counts are numbers of cases, so "1" means one question.
+# A rule is checked only when both runs have the metric (answer-tier rules skip retrieval-tier runs).
+#   max_drop:  candidate may be at most this many cases below the baseline
+#   max_rise:  candidate may be at most this many cases above the baseline (for bad things)
+#   max_ratio: candidate / baseline may be at most this (latency)
+#   max:       absolute ceiling for the candidate
+rules:
+  # Evidence reaches the model
+  - {category: workflow, metric: packed_complete, max_drop: 1}
+  - {category: single,   metric: packed_complete, max_drop: 1}
+  - {category: version,  metric: packed_complete, max_drop: 1}
+  # Answers cite what the gold requires
+  - {category: workflow, metric: cited_complete, max_drop: 1}
+  - {category: single,   metric: cited_complete, max_drop: 1}
+  # Grounding: never more made-up answers to questions the manuals don't answer
+  - {category: negative, metric: made_up,    max_rise: 0}
+  - {category: negative, metric: unlabelled, max: 0}
+  # Speed
+  - {category: all, metric: p50_seconds, max_ratio: 1.2}

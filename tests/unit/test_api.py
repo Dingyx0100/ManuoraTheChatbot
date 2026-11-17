@@ -1,8 +1,13 @@
 """FastAPI endpoints, routing guards and model controls."""
 from fastapi.testclient import TestClient
 import importlib
+import sqlite3
 from functools import lru_cache
+from pathlib import Path
 from uuid import uuid4
+
+import pytest
+import yaml
 from manuora.api.app import app
 from manuora.api.routing import answer_lacks_support, early_response, resolve_scope
 
@@ -87,9 +92,114 @@ def test_chat_rejects_weak_evidence_and_only_shows_cited_sources(monkeypatch) ->
         omitted = client.post("/api/chat", json={"question": "Where is SMTP in Nextcloud 36?",
                                                  "conversation_id": conversation_id}).json()
     assert weak["sources"] == [] and "can't verify" in weak["answer"]
+    assert weak["abstained"] is True and "trace" not in weak
     assert strong["conversation_id"] == conversation_id
     assert [source["citation"] for source in strong["sources"]] == [1]
+    assert strong["abstained"] is False and strong["kind"] == "answer"
     assert omitted["sources"] == [] and "can't verify" in omitted["answer"]
+    assert omitted["abstained"] is True
+
+
+def test_debug_trace_reports_stages_timings_and_outcome(monkeypatch) -> None:
+    api = importlib.import_module("manuora.api.app")
+    documents = [{"product_id": "nextcloud", "product_version": "36", "document_id": "guide"}]
+    monkeypatch.setattr(api, "options", lambda: {"documents": documents})
+    monkeypatch.setattr(api, "settings", lambda: {"assistant_name": "Manuora",
+        "retrieval": {"candidates_per_method": 30, "rerank_candidates": 12},
+        "evidence": {"max_passages": 4, "gate": "absolute", "minimum_score": 3.0,
+                     "relative_margin": None, "passage_char_limit": None}})
+    hits = [{"rerank_score": s, "chunk_id": c, "document_id": "guide", "product_id": "nextcloud",
+             "product_version": "36", "pages": [1], "headings": [], "text": f"text {c}", "retrievers": ["dense"]}
+            for c, s in (("a", 6.0), ("b", 5.0), ("c", 1.0))]
+
+    class Retriever:
+        def search(self, query, **filters):
+            return hits
+
+    class Reranker:
+        def rerank(self, query, candidates, **kwargs):
+            return candidates
+
+    class Generator:
+        def draft_answer(self, question, evidence, **kwargs):
+            return {"answer": "Use it [1].", "stats": {"evidence_count": 1}}
+
+        def prepare_retrieval_context(self, *args, **kwargs):
+            return {}
+
+        def prepare_turn(self, question, **kwargs):
+            return {"action": "direct_retrieval", "query": question,
+                    "scope": {"product_id": "nextcloud", "product_version": "36", "document_id": None}}
+
+        def record_displayed_reply(self, *args, **kwargs):
+            pass
+
+        def close(self):
+            pass
+
+    generator = Generator()
+    monkeypatch.setattr(api, "conversation_generator", lru_cache(maxsize=1)(lambda: generator))
+    monkeypatch.setattr(api, "pipeline", lru_cache(maxsize=1)(lambda: (Retriever(), Reranker(), generator)))
+    with TestClient(app) as client:
+        body = client.post("/api/chat", json={"question": "Where is SMTP in Nextcloud 36?", "debug": True}).json()
+    trace = body["trace"]
+    assert trace["outcome"] == "answered" and body["abstained"] is False
+    assert [p["chunk_id"] for p in trace["stages"]["candidates"]] == ["a", "b", "c"]
+    assert [p["chunk_id"] for p in trace["stages"]["selected"]] == ["a", "b"]  # gate drops c
+    assert [p["chunk_id"] for p in trace["stages"]["packed"]] == ["a"]  # the generator packed one passage
+    assert {"route", "retrieve", "rerank", "select", "generate"} <= set(trace["seconds"])
+
+
+def test_settings_layers_env_overrides_and_validation(monkeypatch, tmp_path) -> None:
+    api = importlib.import_module("manuora.api.app")
+    base = yaml.safe_load(api.SETTINGS.read_text(encoding="utf-8"))
+    config = tmp_path / "assistant.yaml"
+    config.write_text(yaml.safe_dump(base), encoding="utf-8")
+    monkeypatch.setenv("MANUORA_CONFIG", str(config))
+    monkeypatch.setenv("MANUORA_LLM_URL", "http://model-runner:12434/v1/chat")
+    monkeypatch.setenv("MANUORA_DATA_DIR", str(tmp_path / "srv"))
+    monkeypatch.setattr(api, "LOCAL_SETTINGS", tmp_path / "absent.yaml")
+    monkeypatch.setattr(api, "OVERRIDES", {"evidence": {"max_passages": 12}})
+    api.settings.cache_clear()
+    try:
+        options = api.settings()
+        assert options["generation"]["url"] == "http://model-runner:12434/v1/chat"
+        assert options["evidence"]["max_passages"] == 12 and options["evidence"]["gate"] == base["evidence"]["gate"]
+        assert api.sparse_path() == tmp_path / "srv" / Path(base["sparse_index"]).relative_to("data")
+        assert api.resolve_path("config/x.yaml") == api.ROOT / "config/x.yaml"
+        del base["dense_collection"]
+        base["evidence"]["gate"] = "sometimes"
+        config.write_text(yaml.safe_dump(base), encoding="utf-8")
+        api.settings.cache_clear()
+        with pytest.raises(ValueError, match="dense_collection.*evidence.gate"):
+            api.settings()
+    finally:
+        api.settings.cache_clear()
+
+
+def test_ready_checks_dependencies_and_reports_the_model(monkeypatch, tmp_path) -> None:
+    api = importlib.import_module("manuora.api.app")
+    index = tmp_path / "bm25.sqlite"
+    connection = sqlite3.connect(index)
+    connection.execute("create table chunks (chunk_id text)")
+    connection.execute("insert into chunks values ('a')")
+    connection.commit()
+    connection.close()
+    monkeypatch.setattr(api, "settings", lambda: {"sparse_index": str(index), "generation": {"model": "m"}})
+    monkeypatch.setattr(api, "qdrant_status", lambda options: {"ok": True, "detail": "stub"})
+    monkeypatch.setattr(api, "is_loaded", lambda model: False)
+    with TestClient(app) as client:
+        good = client.get("/ready")
+        assert good.status_code == 200 and good.json()["ready"] is True
+        assert good.json()["model"] == {"model": "m", "loaded": False}  # not loaded is still ready
+        monkeypatch.setattr(api, "qdrant_status", lambda options: (_ for _ in ()).throw(OSError("connection refused")))
+        down = client.get("/ready")
+        assert down.status_code == 503 and "refused" in down.json()["checks"]["qdrant"]["detail"]
+        monkeypatch.setattr(api, "settings", lambda: {"sparse_index": str(tmp_path / "missing.sqlite"),
+                                                      "generation": {"model": "m"}})
+        monkeypatch.setattr(api, "qdrant_status", lambda options: {"ok": True})
+        missing = client.get("/ready")
+        assert missing.status_code == 503 and missing.json()["checks"]["sparse_index"]["ok"] is False
 
 
 def test_model_load_and_unload_controls(monkeypatch) -> None:

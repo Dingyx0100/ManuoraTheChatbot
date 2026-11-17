@@ -1,0 +1,2583 @@
+{
+ "meta": {
+  "name": "production",
+  "tier": "retrieval",
+  "split": "dev",
+  "cases": 217,
+  "started": "2026-11-17 12:41",
+  "git": {
+   "commit": "5547967",
+   "dirty": true
+  },
+  "overrides": {},
+  "settings_digest": "f5e6f5188b47",
+  "bench_digest": "a701df3fa9c5",
+  "not_scored": [
+   "conversation"
+  ],
+  "dense_collection": "manuora_qwen3-embedding-0_6b_d4f0cac8cfc9_066814e73f0e",
+  "sparse_index": "data/sparse_indexes/bm25_066814e73f0e.sqlite",
+  "generation_model": "huggingface.co/qwen/qwen3-8b-gguf:q4_k_m",
+  "reranker": "Qwen/Qwen3-Reranker-0.6B",
+  "run": "20261117_1241_retrieval_dev_production"
+ },
+ "records": [
+  {
+   "id": "kc-w007",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 22.8,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.25
+  },
+  {
+   "id": "kc-w008",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 10.29,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.333
+  },
+  {
+   "id": "kc-w009",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.53,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "fc-w006",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 11.03,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.333
+  },
+  {
+   "id": "fc-w007",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.28,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "fc-w008",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.8,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.333
+  },
+  {
+   "id": "nc-w016",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-w017",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 5.48,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-w018",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.06,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-w019",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.75,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-w020",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-w021",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "qgis-w014",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.61,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "qgis-w015",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.25,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "qgis-w016",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "qgis-w017",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.68,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-n016",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.44
+  },
+  {
+   "id": "nc-n017",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.06
+  },
+  {
+   "id": "qgis-n019",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 6.23
+  },
+  {
+   "id": "qgis-n020",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.65
+  },
+  {
+   "id": "kc-n014",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 8.33
+  },
+  {
+   "id": "kc-n015",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.64
+  },
+  {
+   "id": "fc-n008",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.5
+  },
+  {
+   "id": "fc-n009",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 10.07
+  },
+  {
+   "id": "fc-n010",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.2
+  },
+  {
+   "id": "qgis-n021",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 8.45
+  },
+  {
+   "id": "qgis-n022",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.53
+  },
+  {
+   "id": "qgis-n023",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.77
+  },
+  {
+   "id": "kc-n016",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 10.53
+  },
+  {
+   "id": "nc-n018",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.63
+  },
+  {
+   "id": "nc-n019",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 5.64
+  },
+  {
+   "id": "nc-n020",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05
+  },
+  {
+   "id": "fc-n011",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.96
+  },
+  {
+   "id": "qgis-n024",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.74
+  },
+  {
+   "id": "nc-n021",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.57
+  },
+  {
+   "id": "nc-n022",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 5.27
+  },
+  {
+   "id": "fc-n012",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.57
+  },
+  {
+   "id": "kc-n017",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 6.86
+  },
+  {
+   "id": "kc-n018",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 6.39
+  },
+  {
+   "id": "nc-n023",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 5.89
+  },
+  {
+   "id": "qgis-n025",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 6.43
+  },
+  {
+   "id": "kc-n019",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.0
+  },
+  {
+   "id": "fc-n013",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.53
+  },
+  {
+   "id": "nc-n024",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.75
+  },
+  {
+   "id": "qgis-n026",
+   "category": "negative",
+   "expect": "abstain",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 8.62
+  },
+  {
+   "id": "qgis-n027",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 8.97
+  },
+  {
+   "id": "qgis-n028",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.8
+  },
+  {
+   "id": "qgis-n029",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.23
+  },
+  {
+   "id": "qgis-n030",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 8.32
+  },
+  {
+   "id": "qgis-n031",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 11.6
+  },
+  {
+   "id": "qgis-n032",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.38
+  },
+  {
+   "id": "qgis-n033",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 7.08
+  },
+  {
+   "id": "nc-n025",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.69
+  },
+  {
+   "id": "nc-n026",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.05
+  },
+  {
+   "id": "nc-n027",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.56
+  },
+  {
+   "id": "nc-n028",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.3
+  },
+  {
+   "id": "nc-n029",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.73
+  },
+  {
+   "id": "nc-n030",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 6.93
+  },
+  {
+   "id": "nc-n031",
+   "category": "negative",
+   "expect": "premise",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 7.69
+  },
+  {
+   "id": "qgis-s016",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.31,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-s017",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.33,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "kc-s009",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.15,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "kc-s010",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-s018",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.81,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "qgis-s017",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.35,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "qgis-s018",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.87,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "qgis-s019",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.96,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-s019",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 3.94,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "fc-s007",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 11.54,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "qgis-s020",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 7.19,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-s020",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.51,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-s021",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.44,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "qgis-s021",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.84,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-s022",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "fc-s008",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.42,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "fc-s009",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.41,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "kc-s011",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.36,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "kc-s012",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.63,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "fc-s010",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.44,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "qgis-s022",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.91,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "kc-s013",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.11,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "kc-w010",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.41,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.333
+  },
+  {
+   "id": "nc-w022",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.6,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.667
+  },
+  {
+   "id": "kc-w011",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.16,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.2
+  },
+  {
+   "id": "kc-w012",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.52,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-w013",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "kc-w014",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.1,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "kc-w015",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.89,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-w016",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.15,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.143
+  },
+  {
+   "id": "kc-w017",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.06,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-w018",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.39,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-w019",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.41,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "kc-w020",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 9.04,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "kc-w021",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.84,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.2
+  },
+  {
+   "id": "kc-w022",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.72,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-w023",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.38,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-w024",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.15,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-w025",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-w023",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.28,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.333
+  },
+  {
+   "id": "nc-w024",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.15,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-w025",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.96,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-w026",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.45,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-w027",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.38,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-w028",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.23,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-w029",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 4.23,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-w030",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "no_evidence",
+   "kind": "abstain",
+   "seconds": 5.17,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-w031",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.31,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-w032",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.02,
+   "complete": {
+    "candidates": true,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-w033",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.9,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-w034",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.21,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-w035",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.96,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-w036",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.12,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-w037",
+   "category": "workflow",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.36,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-s023",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.3,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-s024",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.03,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-s025",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.69,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-s026",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-s027",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.85,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-s028",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.06,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-s029",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.46,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-s030",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-s031",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.96,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-s032",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.22,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-s014",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.97,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-s015",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.48,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-s016",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.54,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-s017",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.2,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-s018",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.39,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-s019",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.95,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-s020",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.2,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-s021",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.06,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "kc-s022",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.94,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "kc-s023",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.48,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "fc-s011",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 10.8,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "fc-s012",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 10.24,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "fc-s013",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 10.09,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "fc-s014",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.51,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "fc-s015",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.59,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "fc-s016",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.43,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "fc-s017",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 8.26,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "fc-s018",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.58,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "fc-s019",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 10.09,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "fc-s020",
+   "category": "single",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.98,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": true,
+    "packed": true
+   },
+   "packed_recall": 1.0
+  },
+  {
+   "id": "nc-v014",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.54,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v015",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.06,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-v016",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.32,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v017",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.06,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v018",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.03,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v019",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.08,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v020",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.47,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-v021",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.31,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-v022",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.16,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-v023",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-v024",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.4,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v025",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.17,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v026",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.11,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v027",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.71,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v028",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.97,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v029",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.13,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-v030",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 7.16,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v031",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.14,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-v032",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.59,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v033",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-v034",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.08,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v035",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.18,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v036",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.92,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v037",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.55,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v038",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.24,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v039",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.49,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v040",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.83,
+   "complete": {
+    "candidates": true,
+    "reranked": true,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.0
+  },
+  {
+   "id": "nc-v041",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.48,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v042",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.34,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v043",
+   "category": "version",
+   "expect": "answer",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.86,
+   "complete": {
+    "candidates": false,
+    "reranked": false,
+    "selected": false,
+    "packed": false
+   },
+   "packed_recall": 0.5
+  },
+  {
+   "id": "nc-v044",
+   "category": "version",
+   "expect": "premise",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05
+  },
+  {
+   "id": "nc-v045",
+   "category": "version",
+   "expect": "premise",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.05
+  },
+  {
+   "id": "nc-v046",
+   "category": "version",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 4.1
+  },
+  {
+   "id": "nc-v047",
+   "category": "version",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.32
+  },
+  {
+   "id": "nc-v048",
+   "category": "version",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.14
+  },
+  {
+   "id": "nc-v049",
+   "category": "version",
+   "expect": "premise",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.06
+  },
+  {
+   "id": "nc-v050",
+   "category": "version",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 6.13
+  },
+  {
+   "id": "nc-v051",
+   "category": "version",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.46
+  },
+  {
+   "id": "nc-v052",
+   "category": "version",
+   "expect": "premise",
+   "private": false,
+   "outcome": "clarify",
+   "kind": "clarify",
+   "seconds": 0.06
+  },
+  {
+   "id": "nc-v053",
+   "category": "version",
+   "expect": "premise",
+   "private": false,
+   "outcome": "retrieval_only",
+   "kind": "retrieval_only",
+   "seconds": 5.04
+  }
+ ]
+}

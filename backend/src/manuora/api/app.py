@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 import threading
+import time
+import urllib.request
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -13,7 +16,7 @@ from uuid import UUID, uuid4
 
 import yaml
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from manuora.generation.local import ManuoraGraphGenerator
@@ -57,9 +60,19 @@ class ChatRequest(BaseModel):
     document_id: str | None = None
     # Clients reuse the returned ID for subsequent questions. No shared default.
     conversation_id: UUID = Field(default_factory=uuid4)
+    # Adds a "trace" (passages per stage, timings, outcome) to the reply; used by the evaluation runner.
+    debug: bool = False
+    # Evaluation only: stop after evidence packing; no model call, nothing stored in the conversation.
+    retrieval_only: bool = False
 
 
-LOCAL_SETTINGS = ROOT / "config" / "local.yaml"  # optional, not in git: machine-specific overrides
+# Settings are layered: config/assistant.yaml (or $MANUORA_CONFIG), then config/local.yaml (optional,
+# not in git), then environment variables, then OVERRIDES (set in-process by the evaluation runner).
+LOCAL_SETTINGS = ROOT / "config" / "local.yaml"
+OVERRIDES: dict = {}
+REQUIRED_SETTINGS = ("assistant_name", "embedding_config", "dense_collection", "sparse_index", "reranker.model_id",
+                     "generation.model", "generation.url", "conversation.db_path", "retrieval.candidates_per_method",
+                     "retrieval.rerank_candidates", "evidence.max_passages", "evidence.gate")
 
 
 def _merge(base: dict, extra: dict) -> dict:
@@ -69,17 +82,54 @@ def _merge(base: dict, extra: dict) -> dict:
     return out
 
 
+def check_settings(options: dict) -> list[str]:
+    """Problems that would only surface mid-request otherwise."""
+    problems = []
+    for dotted in REQUIRED_SETTINGS:
+        node = options
+        for part in dotted.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        if node in (None, ""):
+            problems.append(f"missing setting {dotted}")
+    gate = (options.get("evidence") or {}).get("gate")
+    if gate not in (None, "absolute", "relative"):
+        problems.append(f"evidence.gate must be absolute or relative, not {gate!r}")
+    return problems
+
+
 @lru_cache(maxsize=1)
 def settings() -> dict:
-    options = yaml.safe_load(SETTINGS.read_text(encoding="utf-8"))
+    base = Path(os.environ.get("MANUORA_CONFIG") or SETTINGS)
+    options = yaml.safe_load(base.read_text(encoding="utf-8"))
     if LOCAL_SETTINGS.is_file():
         options = _merge(options, yaml.safe_load(LOCAL_SETTINGS.read_text(encoding="utf-8")) or {})
+    if os.environ.get("MANUORA_LLM_URL"):
+        options = _merge(options, {"generation": {"url": os.environ["MANUORA_LLM_URL"]}})
+    options = _merge(options, OVERRIDES)
+    problems = check_settings(options)
+    if problems:
+        raise ValueError(f"invalid settings ({base}): " + "; ".join(problems))
     register_products(options.get("products") or {})
     return options
 
 
+def data_root() -> Path:
+    """Where manuals, indexes and conversations live: $MANUORA_DATA_DIR, else <repo>/data."""
+    return Path(os.environ.get("MANUORA_DATA_DIR") or ROOT / "data")
+
+
+def resolve_path(value: str | Path) -> Path:
+    """Config paths: absolute as given; "data/..." under data_root(); anything else under the repo."""
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    if path.parts and path.parts[0] == "data":
+        return data_root().joinpath(*path.parts[1:])
+    return ROOT / path
+
+
 def sparse_path() -> Path:
-    return ROOT / settings()["sparse_index"]
+    return resolve_path(settings()["sparse_index"])
 
 
 @lru_cache(maxsize=1)
@@ -92,9 +142,7 @@ def conversation_generator() -> ManuoraGraphGenerator:
     memory = dict(options["conversation"])
     if memory.get('context_router_model_path'):
         memory['context_router_model_path']=str(ROOT / memory['context_router_model_path'])
-    db_path = Path(memory.pop("db_path"))
-    if not db_path.is_absolute():
-        db_path = ROOT / db_path
+    db_path = resolve_path(memory.pop("db_path"))
     db_path.parent.mkdir(parents=True, exist_ok=True)
     evidence = options["evidence"]
     return ManuoraGraphGenerator(**generation, **memory, db_path=str(db_path),
@@ -109,7 +157,7 @@ def version_index(source: str) -> VersionIndex:
 
 @lru_cache(maxsize=1)
 def outline_index(path: str) -> OutlineIndex:
-    return OutlineIndex(ROOT / path, pipeline()[0].encoder)
+    return OutlineIndex(resolve_path(path), pipeline()[0].encoder)
 
 
 @lru_cache(maxsize=1)
@@ -126,7 +174,54 @@ def pipeline() -> tuple[HybridRetriever, QwenReranker, ManuoraGraphGenerator]:
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    """Liveness: the process answers. Use /ready for dependencies."""
     return {"status": "ok"}
+
+
+def qdrant_status(options: dict) -> dict:
+    """Is the dense collection reachable? (remote Qdrant: one HTTP call; local store: the folder exists)."""
+    config = IndexConfig.load(ROOT / options["embedding_config"], ROOT)
+    collection = options["dense_collection"]
+    if config.store["mode"] == "local":
+        path = config.location("path")
+        return {"ok": path.exists(), "detail": f"local store {path}"}
+    url = config.store["url"].rstrip("/") + f"/collections/{collection}"
+    with urllib.request.urlopen(url, timeout=3) as response:
+        result = json.load(response).get("result") or {}
+    return {"ok": True, "detail": f"{collection}: {result.get('points_count')} points, status {result.get('status')}"}
+
+
+@app.get("/ready")
+def ready():
+    """Readiness: settings, the sparse index and Qdrant must work. The model is reported, not required,
+    because it is loaded on demand from the page."""
+    checks: dict[str, dict] = {}
+    try:
+        options = settings()
+        checks["config"] = {"ok": True}
+    except (ValueError, OSError, yaml.YAMLError) as exc:
+        return JSONResponse(status_code=503, content={"ready": False, "checks": {"config": {"ok": False, "detail": str(exc)}}})
+    try:
+        connection = sqlite3.connect(f"file:{sparse_path().as_posix()}?mode=ro", uri=True)
+        try:
+            count = connection.execute("SELECT count(*) FROM chunks").fetchone()[0]
+        finally:
+            connection.close()
+        checks["sparse_index"] = {"ok": count > 0, "detail": f"{count} chunks"}
+    except (sqlite3.Error, OSError) as exc:
+        checks["sparse_index"] = {"ok": False, "detail": f"{sparse_path()}: {exc}"}
+    try:
+        checks["qdrant"] = qdrant_status(options)
+    except (OSError, ValueError, KeyError) as exc:  # URLError is an OSError
+        checks["qdrant"] = {"ok": False, "detail": str(exc)}
+    model = options["generation"]["model"]
+    try:
+        loaded = is_loaded(model)
+    except (OSError, RuntimeError):
+        loaded = None  # Docker Model Runner not reachable
+    ok = all(check["ok"] for check in checks.values())
+    body = {"ready": ok, "checks": checks, "model": {"model": model, "loaded": loaded}}
+    return body if ok else JSONResponse(status_code=503, content=body)
 
 
 @app.get("/")
@@ -188,20 +283,43 @@ def chat(request: ChatRequest) -> dict:
         return _chat(request)
 
 
+def _passages(hits: list[dict], char_limit: int | None = None) -> list[dict]:
+    """What the trace keeps of a passage: enough to score it against gold (packed: the text the model sees)."""
+    return [{"chunk_id": h.get("chunk_id"), "product_version": h.get("product_version"),
+             "text": (h.get("text") or "")[:char_limit] if char_limit else h.get("text") or "",
+             "rerank_score": h.get("rerank_score")} for h in hits]
+
+
 def _chat(request: ChatRequest) -> dict:
     conversation_id = str(request.conversation_id)
     generator = None
     context = None
     draft = None
     turn = None
+    # Passages per stage, seconds per step and why the reply ended the way it did.
+    trace: dict = {"stages": {}, "seconds": {}, "outcome": None}
+    clock = time.perf_counter()
 
-    def reply(answer: str, sources: list | None = None, *, kind: str = 'answer') -> dict:
-        generator.record_displayed_reply(request.question, answer, thread_id=conversation_id,
-            sources=sources or [], kind=kind, context=context, draft=draft)
-        return {"answer": answer, "sources": sources or [],
+    def lap(name: str) -> None:
+        nonlocal clock
+        now = time.perf_counter()
+        trace["seconds"][name] = round(now - clock, 3)
+        clock = now
+
+    def reply(answer: str, sources: list | None = None, *, kind: str = 'answer', outcome: str | None = None) -> dict:
+        if not request.retrieval_only:
+            generator.record_displayed_reply(request.question, answer, thread_id=conversation_id,
+                sources=sources or [], kind=kind, context=context, draft=draft)
+        trace["outcome"] = outcome or kind
+        body = {"answer": answer, "sources": sources or [],
                 "conversation_id": conversation_id,
+                "kind": kind, "abstained": kind == 'abstain',
                 "routing":({k:turn.get(k) for k in ('action','method','reason','confidence','decision_seconds','rewrite_seconds','rewrite_issues')}
                            if turn else {'action':'chat','method':'early_rules'})}
+        if request.debug:
+            trace["query"], trace["scope"] = (turn or {}).get('query'), (turn or {}).get('scope')
+            body["trace"] = trace
+        return body
 
     try:
         documents = options()["documents"]
@@ -214,6 +332,7 @@ def _chat(request: ChatRequest) -> dict:
         if response is not None:
             return reply(response, kind='chat')
         turn = generator.prepare_turn(request.question,thread_id=conversation_id,documents=documents,context=context)
+        lap("route")
         if turn['action']=='clarify':
             return reply(turn['reason'],kind='clarify')
         if turn['action']=='edit_previous_answer':
@@ -231,7 +350,7 @@ def _chat(request: ChatRequest) -> dict:
                 request.question, scope.get('product_id'), scope.get('product_version'))
             if hits:
                 return reply(version_reply(scope['product_id'], str(scope['product_version']), hits[0]),
-                             kind='abstain')
+                             kind='abstain', outcome='version_check')
         with MODEL_LOCK:
             retriever, reranker, generator = pipeline()
         controls = settings()["retrieval"]
@@ -239,13 +358,17 @@ def _chat(request: ChatRequest) -> dict:
             turn['query'], **turn['scope'],
             candidates=controls["candidates_per_method"],
         )
+        lap("retrieve")
         ranked = reranker.rerank(
             turn['query'], candidates, limit=controls["rerank_candidates"],
             input_limit=controls["rerank_candidates"],
         )
+        lap("rerank")
         evidence = select_evidence(ranked, **settings()["evidence"])
+        if request.debug:
+            trace["stages"].update(candidates=_passages(candidates), reranked=_passages(ranked), selected=_passages(evidence))
         if not evidence:
-            return reply(UNCERTAIN_RESPONSE, kind='abstain')
+            return reply(UNCERTAIN_RESPONSE, kind='abstain', outcome='no_evidence')
         # Optional task outlines (off by default; experiment Q): passages linked offline to the
         # matched task join the evidence after the best reranked passage.
         outline = controls.get("outlines")
@@ -259,6 +382,14 @@ def _chat(request: ChatRequest) -> dict:
             found = get_chunks(sparse_path(), ids)
             extra = [{**found[c], "rerank_score": None, "retrievers": ["outline"]} for c in ids if c in found]
             evidence = merge_outline(evidence, extra, settings()["evidence"]["max_passages"])
+            if request.debug:
+                trace["stages"]["selected"] = _passages(evidence)
+        lap("select")
+        char_limit = settings()["evidence"].get("passage_char_limit")
+        if request.retrieval_only:
+            used = generator.packed_count(request.question, evidence)
+            trace["stages"]["packed"] = _passages(evidence[:used], char_limit)
+            return reply("", kind='retrieval_only')
         with MODEL_LOCK:
             draft = generator.draft_answer(request.question, evidence, thread_id=conversation_id,
                                            retrieval_question=turn['query'])
@@ -267,24 +398,28 @@ def _chat(request: ChatRequest) -> dict:
             # only passages actually supplied to generation.
             used = draft['stats'].get("evidence_count", len(evidence))
             evidence = evidence[:used]
+        lap("generate")
+        if request.debug:
+            trace["stages"]["packed"] = _passages(evidence, char_limit)
+            trace["draft"] = answer
         if answer_lacks_support(answer):
-            return reply(UNCERTAIN_RESPONSE, kind='abstain')
+            return reply(UNCERTAIN_RESPONSE, kind='abstain', outcome='model_insufficient')
         cited = {int(number) for number in re.findall(r"\[(\d+)\]", answer)}
         if not cited or any(number < 1 or number > len(evidence) for number in cited):
-            return reply(UNCERTAIN_RESPONSE, kind='abstain')
+            return reply(UNCERTAIN_RESPONSE, kind='abstain', outcome='invalid_citation')
         # Optional grounding checks (off by default; experiment O).
         grounding = settings().get("grounding") or {}
         if grounding.get("term_check"):
             texts = [passage_text(hit) for number, hit in enumerate(evidence, 1)
                      if grounding["term_check"] == "packed" or number in cited]
             if missing_terms(request.question, texts, spelling=bool(grounding.get("spelling"))):
-                return reply(UNCERTAIN_RESPONSE, kind='abstain')
+                return reply(UNCERTAIN_RESPONSE, kind='abstain', outcome='term_check')
         if grounding.get("support_check"):
             with MODEL_LOCK:
                 verdict = generator.check_support(request.question, answer, evidence)
             if not verdict["supported"]:
-                return reply(UNCERTAIN_RESPONSE, kind='abstain')
-        return reply(answer, [
+                return reply(UNCERTAIN_RESPONSE, kind='abstain', outcome='support_check')
+        return reply(answer, outcome='answered', sources=[
             {"citation": number, "chunk_id": hit["chunk_id"],
              "document_id": hit["document_id"], "product_id": hit["product_id"],
              "product_version": hit["product_version"], "pages": hit["pages"],
@@ -298,7 +433,7 @@ def _chat(request: ChatRequest) -> dict:
 
 @app.get("/api/source")
 def source(product_id: str, document_id: str, product_version: str = "") -> FileResponse:
-    source_root = ROOT / "data" / "sources"
+    source_root = data_root() / "sources"
     for chunks_path in source_root.rglob("retrieval_chunks.jsonl"):
         with chunks_path.open(encoding="utf-8") as stream:
             first = json.loads(next(stream))

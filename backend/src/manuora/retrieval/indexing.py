@@ -48,6 +48,8 @@ class IndexConfig:
         if not isinstance(data, dict) or not all(k in data for k in ("model", "store", "index")):
             raise ValueError("embedding config needs model, store, and index mappings")
         model, store, index = (data[k] for k in ("model", "store", "index"))
+        if store.get("mode") == "remote" and os.environ.get("MANUORA_QDRANT_URL"):
+            store = {**store, "url": os.environ["MANUORA_QDRANT_URL"]}  # e.g. http://qdrant:6333 in a container
         if not model.get("id") or not model.get("revision"):
             raise ValueError("model.id and an immutable model.revision are required")
         for side in ("document", "query"):
