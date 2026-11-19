@@ -15,14 +15,18 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from manuora.generation.local import ManuoraGraphGenerator
 from manuora.generation.model_control import is_loaded, load_model, unload_model
 from manuora.api.grounding import VersionIndex, missing_terms, passage_text, register_products, version_reply
 from manuora.api.routing import answer_lacks_support, early_response, resolve_scope
+from manuora.library import catalog
+from manuora.library.indexer import LibraryIndex
+from manuora.library.jobs import TYPES as MANUAL_TYPES, Library
 from manuora.retrieval.evidence import select_evidence
 from manuora.retrieval.hybrid import HybridRetriever
 from manuora.retrieval.indexing import IndexConfig
@@ -48,9 +52,12 @@ async def lifespan(app: FastAPI):
                 conversation_generator().close()
                 conversation_generator.cache_clear()
             pipeline.cache_clear()
+        if _LIBRARY is not None:
+            _LIBRARY.stop()
 
 
 app = FastAPI(title="Manuora", lifespan=lifespan)
+app.mount("/assets", StaticFiles(directory=ROOT / "frontend" / "assets"), name="assets")
 
 
 class ChatRequest(BaseModel):
@@ -245,8 +252,12 @@ def options() -> dict:
         """).fetchall()
     finally:
         connection.close()
+    products, titles = catalog.names(data_root() / "sources")
+    products = {**products, **{str(k): str(v) for k, v in (settings().get("products") or {}).items()}}
     return {"documents": [{"product_id": product, "product_version": version,
-                            "document_id": document} for product, version, document in rows]}
+                            "document_id": document} for product, version, document in rows],
+            "products": {product: products.get(product, product) for product, _, _ in rows},
+            "titles": {document: titles.get(document, document) for _, _, document in rows}}
 
 
 @app.get("/api/model/status")
@@ -457,3 +468,124 @@ def source(product_id: str, document_id: str, product_version: str = "") -> File
                 return FileResponse(candidate, media_type="application/pdf", filename=filename,
                                     content_disposition_type="inline")
     raise HTTPException(status_code=404, detail="Source PDF not found")
+
+
+# --------------------------------------------------------------------------- library: upload and manage manuals
+_LIBRARY: Library | None = None
+
+
+def library() -> Library:
+    """The upload worker starts on first use of the library API (not at import, so tests stay model-free)."""
+    global _LIBRARY
+    if _LIBRARY is None:
+        sources = data_root() / "sources"
+
+        def index_factory() -> LibraryIndex:
+            options = settings()
+            config = IndexConfig.load(ROOT / options["embedding_config"], ROOT)
+            return LibraryIndex(config, options["dense_collection"], sparse_path(), sources,
+                                lexical_collection=(options.get("retrieval") or {}).get("lexical_collection"))
+
+        def changed() -> None:
+            version_index.cache_clear()
+            outline_index.cache_clear()
+            register_products(catalog.names(sources)[0])
+
+        def gpu_busy() -> bool:
+            try:
+                return bool(is_loaded(settings()["generation"]["model"]))
+            except Exception:  # unknown: assume the GPU is taken
+                return True
+
+        _LIBRARY = Library(ROOT, sources, data_root() / "library", index_factory, changed, gpu_busy)
+        _LIBRARY.start()
+    return _LIBRARY
+
+
+class SubmitRequest(BaseModel):
+    upload_id: str
+    display_name: str
+    version: str | None = None
+    title: str
+    type: str
+    product_id: str | None = None
+
+
+@app.get("/api/library")
+def library_overview() -> dict:
+    lib = library()
+    connection = sqlite3.connect(f"file:{sparse_path().as_posix()}?mode=ro", uri=True)
+    try:
+        counts = dict(connection.execute("SELECT document_id, COUNT(*) FROM chunks GROUP BY document_id"))
+    finally:
+        connection.close()
+    products: dict[str, dict] = {}
+    for manual in catalog.manuals(data_root() / "sources"):
+        product = products.setdefault(manual.product_id, {"product_id": manual.product_id,
+                                                          "display_name": manual.display_name, "manuals": []})
+        product["manuals"].append({"document_id": manual.document_id, "title": manual.title, "type": manual.type,
+                                   "version": manual.version, "chunks": counts.get(manual.document_id, 0),
+                                   "indexed": manual.document_id in counts})
+    return {"products": sorted(products.values(), key=lambda p: p["display_name"].casefold()),
+            "jobs": [{k: v for k, v in job.items() if k not in ("upload_path", "manifest")} for job in lib.store.list()],
+            "types": list(MANUAL_TYPES)}
+
+
+@app.post("/api/library/uploads")
+async def library_upload(request: Request, filename: str) -> dict:
+    lib = library()
+    target = lib.new_upload(filename)
+    with target.open("wb") as out:
+        async for chunk in request.stream():
+            out.write(chunk)
+    try:
+        return lib.finish_upload(target)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/library/uploads/{upload_id}")
+def library_discard(upload_id: str) -> dict:
+    library().discard_upload(upload_id)
+    return {"ok": True}
+
+
+@app.post("/api/library/jobs")
+def library_submit(body: SubmitRequest) -> dict:
+    try:
+        return library().submit(body.upload_id, display_name=body.display_name, version=body.version,
+                                title=body.title, type=body.type, product_id=body.product_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/library/jobs/{job_id}/retry")
+def library_retry(job_id: str) -> dict:
+    try:
+        return library().retry(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/library/jobs/{job_id}")
+def library_dismiss(job_id: str) -> dict:
+    try:
+        library().dismiss(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@app.get("/api/library/jobs/{job_id}/log")
+def library_log(job_id: str) -> dict:
+    return {"log": library().log(job_id)}
+
+
+@app.delete("/api/library/documents/{document_id}")
+def library_remove(document_id: str) -> dict:
+    try:
+        return library().remove(document_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="manual not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

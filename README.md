@@ -27,7 +27,8 @@ All settings are in [config/assistant.yaml](config/assistant.yaml).
 | `backend/src/manuora/knowledge/` | Product manifest schemas |
 | `backend/src/manuora/evaluation/` | Benchmark tools (`bench`), runner and scorecard (`run`), baseline comparison and release gate (`compare`), gold coverage scoring |
 | `eval/` | The benchmark (`bench/cases.jsonl`), release gate rules (`gates.yaml`), baselines per tier and split (`baselines/`), holdout usage log |
-| `frontend/index.html` | Chat page served by the app |
+| `frontend/` | The web app: `index.html` shell, `assets/app.js` (chat, model controls), `assets/library.js` (Library page), `assets/app.css` (light and dark themes) |
+| `backend/src/manuora/library/` | Library: manifests catalog (`catalog.py`), upload jobs (`jobs.py`), incremental add/remove in the indexes (`indexer.py`) |
 | `scripts/` | Pipeline entry points (below), `maintenance/` (parsing-quality tools), `review/` (HTML review pages) |
 | `config/` | Assistant and embedding configs |
 | `tests/unit/` | Unit tests; no models or manuals needed |
@@ -62,6 +63,17 @@ python -m pytest tests/unit            # unit tests
 ```
 
 Put source PDFs under `data/sources/<product>/<version>/`. `ingest.py` writes a `manifest.yaml` next to them and the processed output under `processed/<doc_id>/`.
+
+### Adding manuals from the app
+
+Open **Library** in the sidebar and drop PDFs. Each file gets a suggested product, version, title and type to confirm. A job then runs upload → parse → chunk → embed → index, one at a time, and the manual becomes searchable in chat when it reaches **Ready**.
+
+- **Placement:** the PDF goes to `data/sources/<Product>/<version>/`, next to existing versions, with its own `manifest.yaml` entry. A manual with the same product, version and title replaces the old one.
+- **Indexing:** incremental. Only the new manual's passages are embedded and added to the SQLite store and both Qdrant collections. Afterwards the three index manifests get the corpus hash of the chunk files on disk, so they stay consistent. The collection and index names keep the hash they were built with; a full rebuild (`index_embeddings.py`, `index_sparse.py`, `index_qdrant_lexical.py`) gives them a new name.
+- **Remove** takes a manual out of all indexes and moves its PDF and processed files to `data/library/trash/`.
+- **Parsing device:** when the chat model is loaded, parsing runs on the CPU (slower) so the two don't compete for GPU memory.
+- **State:** jobs and their logs are in `data/library/`. A job interrupted by a restart can be retried from the step it reached.
+- **Eval comparability:** adding or removing manuals changes retrieval results. Compare eval runs only on the same corpus.
 
 ### Configuration
 
