@@ -8,7 +8,7 @@ When the manuals don't support an answer, Manuora says so instead of guessing.
 
 ```
 question → rules router (direct / rewrite follow-up / clarify / edit previous answer)
-         → hybrid retrieval: Qwen3-Embedding-0.6B in Qdrant + BM25 (SQLite FTS5), RRF k=60, 30 candidates each
+         → hybrid retrieval: Qwen3-Embedding-0.6B in Qdrant + BM25 sparse vectors, fused by Qdrant (RRF k=60), 30 candidates each
          → Qwen3-Reranker-0.6B on the top 12, then evidence selection: keep 4, drop scores below 3.0
          → Qwen3-8B (2048-token context, 4 × 850-character excerpts) with LangGraph memory
          → citation and name checks, then answer or abstain
@@ -55,7 +55,8 @@ The embedding and reranker models load with `local_files_only: true`, so downloa
 python scripts/ingest.py               # preview what would be (re)processed
 python scripts/ingest.py --run         # manifest → parse → chunks → visual regions (skips up-to-date stages)
 python scripts/index_embeddings.py     # Qdrant dense index
-python scripts/index_sparse.py         # BM25 SQLite index
+python scripts/index_sparse.py         # SQLite chunk store (also the fallback FTS5 BM25 index)
+python scripts/index_qdrant_lexical.py # BM25 sparse vectors: copies the dense collection into <name>__bm25
 .\start_manuora.ps1                    # app on http://127.0.0.1:8000
 python -m pytest tests/unit            # unit tests
 ```

@@ -373,6 +373,15 @@ def _ensure_filter_indexes(client: QdrantClient, collection: str, config: IndexC
             client.create_payload_index(collection, field, models.PayloadSchemaType.KEYWORD, wait=True)
 
 
+def scope_filter(*, product_id: str | None = None, product_version: str | None = None,
+                 document_id: str | None = None) -> models.Filter | None:
+    """Qdrant equality filter on the scope fields that are set (None when nothing is set)."""
+    conditions = [models.FieldCondition(key=key, match=models.MatchValue(value=value))
+                  for key, value in (("product_id", product_id), ("product_version", product_version),
+                                     ("document_id", document_id)) if value is not None]
+    return models.Filter(must=conditions) if conditions else None
+
+
 def search_index(config: IndexConfig, collection: str, query: str, *, limit: int = 5,
                  product_id: str | None = None, product_version: str | None = None,
                  document_id: str | None = None, encoder: Encoder | None = None) -> list[dict]:
@@ -384,16 +393,14 @@ def search_index(config: IndexConfig, collection: str, query: str, *, limit: int
     space_hash, _ = space_identity(config, encoder)
     if space_hash != manifest["space_hash"] or encoder.dimension != manifest["dimension"]:
         raise ValueError("configured embedding model does not match the collection's vector space")
-    conditions = [models.FieldCondition(key=key, match=models.MatchValue(value=value))
-                  for key, value in (("product_id", product_id), ("product_version", product_version),
-                                     ("document_id", document_id)) if value is not None]
     client = open_store(config)
     try:
         if not client.collection_exists(collection):
             raise ValueError(f"missing Qdrant collection: {collection}")
         result = client.query_points(
             collection_name=collection, query=encoder.embed_query(query),
-            query_filter=models.Filter(must=conditions) if conditions else None,
+            query_filter=scope_filter(product_id=product_id, product_version=product_version,
+                                      document_id=document_id),
             limit=limit, with_payload=True,
         )
         return [{"score": point.score, **(point.payload or {})} for point in result.points]

@@ -51,6 +51,12 @@ conversation:
   summary_max_output_tokens: 220
 retrieval:
   candidates_per_method: 30
+  # Lexical half of hybrid retrieval (experiment S). qdrant_sparse: BM25 sparse vectors in Qdrant
+  # (<dense_collection>__bm25, built by scripts/index_qdrant_lexical.py); sqlite: FTS5 BM25.
+  # fusion qdrant: dense + BM25 fused by Qdrant in one request (RRF, rrf_k); python: hybrid.reciprocal_rank_fusion.
+  lexical: qdrant_sparse
+  fusion: qdrant
+  rrf_k: 60
   rerank_candidates: 12
   # Task outlines (experiment Q): null = off; {path, top_k, min_score} adds passages linked offline to the matched task.
   outlines: null

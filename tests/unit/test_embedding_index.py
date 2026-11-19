@@ -161,3 +161,67 @@ def test_named_query_prompt_is_used_for_encoding_and_token_check():
     assert encoder.count_document_tokens("install QGIS") == 2
     encoder.embed_documents(["install QGIS"])
     assert encoder.model.calls[1][1]["prompt"] == ""
+
+
+def test_porter_sparse_index_is_separate_and_stems(tmp_path):
+    source = tmp_path / "sources" / "KiCad" / "processed" / "guide"
+    source.mkdir(parents=True)
+    chunk = {"chunk_id": "guide:1", "product_id": "kicad", "product_version": "9", "document_id": "guide",
+             "source_pdf": "guide.pdf", "headings": ["Footprints"], "pages": [3], "refs": [],
+             "text": "Assigning footprints to symbols."}
+    (source / "retrieval_chunks.jsonl").write_text(json.dumps(chunk) + "\n", encoding="utf-8")
+    plain = build_sparse_index(tmp_path, tmp_path / "sources")
+    porter = build_sparse_index(tmp_path, tmp_path / "sources", tokenizer="porter unicode61")
+    plain_path, porter_path = (tmp_path / m["index"] for m in (plain, porter))
+    assert plain_path == index_path(tmp_path, plain["corpus_hash"]) and plain_path != porter_path
+    assert porter["tokenizer"] == "porter unicode61" and porter["corpus_hash"] == plain["corpus_hash"]
+    assert search_sparse(plain_path, "assign footprint") == []
+    assert search_sparse(porter_path, "assign footprint")[0]["chunk_id"] == "guide:1"
+    with pytest.raises(ValueError, match="tokenizer"):
+        build_sparse_index(tmp_path, tmp_path / "sources", tokenizer="porter'); DROP TABLE chunks; --")
+
+
+def test_hybrid_rejects_unknown_or_inconsistent_arms(tmp_path):
+    from manuora.retrieval.hybrid import HybridRetriever
+    with pytest.raises(ValueError, match="retrieval.lexical"):
+        HybridRetriever(None, "dense", tmp_path / "bm25.sqlite", lexical="elastic")
+    with pytest.raises(ValueError, match="needs retrieval.lexical=qdrant_sparse"):
+        HybridRetriever(None, "dense", tmp_path / "bm25.sqlite", fusion="qdrant")
+
+
+class FakeQdrant:
+    def __init__(self, points):
+        self.points, self.calls = points, []
+
+    def query_points(self, collection, **kwargs):
+        from types import SimpleNamespace
+        self.calls.append(kwargs)
+        return SimpleNamespace(points=[SimpleNamespace(score=s, payload=p) for s, p in self.points])
+
+
+def _qdrant_lexical(points):
+    from manuora.retrieval.qdrant_lexical import QdrantLexical
+    lexical = QdrantLexical.__new__(QdrantLexical)
+    lexical.collection, lexical.options, lexical.client = "c__bm25", {"avg_len": 100.0}, FakeQdrant(points)
+    return lexical
+
+
+def test_qdrant_bm25_hits_fuse_like_sqlite_hits():
+    from qdrant_client import models
+    part = {"chunk_id": "doc:1", "parent_chunk_id": "doc:1", "vector_chunk_id": "doc:1:part-1-of-2"}
+    lexical = _qdrant_lexical([(4.0, part), (3.0, {**part, "vector_chunk_id": "doc:1:part-2-of-2"}),
+                               (2.0, {"chunk_id": "doc:2"})])
+    hits = lexical.search("footprint editor", limit=5, product_id="kicad", product_version="9")
+    call = lexical.client.calls[0]
+    assert call["using"] == "bm25" and call["limit"] == 5
+    assert call["query"].model == "qdrant/bm25" and call["query"].options == {"avg_len": 100.0}
+    assert {c.key for c in call["query_filter"].must} == {"product_id", "product_version"}
+    fused = reciprocal_rank_fusion([{"chunk_id": "doc:2", "score": 0.9}], hits)
+    assert [h["chunk_id"] for h in fused] == ["doc:2", "doc:1"] and fused[0]["retrievers"] == ["dense", "bm25"]
+    assert lexical.search("?!", limit=5) == [] and len(lexical.client.calls) == 1  # no terms, no request
+
+    fusion = lexical.hybrid("footprint editor", [0.1, 0.2, 0.3], limit=5, rrf_k=60)
+    call = lexical.client.calls[-1]
+    assert [p.using for p in call["prefetch"]] == ["dense", "bm25"] and call["limit"] == 10
+    assert isinstance(call["query"], models.RrfQuery) and call["query"].rrf.k == 60
+    assert [(h["chunk_id"], h["matched_part"]) for h in fusion] == [("doc:1", "doc:1:part-1-of-2"), ("doc:2", None)]

@@ -12,19 +12,28 @@ from time import perf_counter
 from manuora.retrieval.indexing import chunk_files, corpus_identity
 
 
-def index_path(root: Path, corpus_hash: str) -> Path:
-    return root / "data" / "sparse_indexes" / f"bm25_{corpus_hash[:12]}.sqlite"
+DEFAULT_TOKENIZER = "unicode61"
 
 
-def build_sparse_index(root: Path, source_root: Path) -> dict:
+def index_path(root: Path, corpus_hash: str, tokenizer: str = DEFAULT_TOKENIZER) -> Path:
+    """bm25_<hash>.sqlite for the production tokenizer; bm25-<first word>_<hash> otherwise (e.g. bm25-porter)."""
+    tag = "" if tokenizer == DEFAULT_TOKENIZER else "-" + re.sub(r"\W+", "", tokenizer.split()[0])
+    return root / "data" / "sparse_indexes" / f"bm25{tag}_{corpus_hash[:12]}.sqlite"
+
+
+def build_sparse_index(root: Path, source_root: Path, *, tokenizer: str = DEFAULT_TOKENIZER) -> dict:
+    """`tokenizer` is an FTS5 tokenize spec, e.g. "porter unicode61" for English stemming."""
+    if not re.fullmatch(r"[a-z0-9_ ]+", tokenizer):
+        raise ValueError(f"unsupported FTS5 tokenizer spec: {tokenizer!r}")
     started = perf_counter()
     files = chunk_files(source_root)
     corpus_hash, chunks = corpus_identity(files, source_root, None)
-    target = index_path(root, corpus_hash)
+    target = index_path(root, corpus_hash, tokenizer)
     manifest_path = target.with_suffix(".json")
     if target.is_file() and manifest_path.is_file():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("corpus_hash") == corpus_hash and manifest.get("chunks") == len(chunks):
+        if (manifest.get("corpus_hash") == corpus_hash and manifest.get("chunks") == len(chunks)
+                and manifest.get("tokenizer", DEFAULT_TOKENIZER) == tokenizer):
             return manifest
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".sqlite", delete=False) as temporary:
@@ -32,7 +41,7 @@ def build_sparse_index(root: Path, source_root: Path) -> dict:
     try:
         connection = sqlite3.connect(temporary_path)
         try:
-            connection.executescript("""
+            connection.executescript(f"""
                 CREATE TABLE chunks (
                     rowid INTEGER PRIMARY KEY, chunk_id TEXT UNIQUE NOT NULL,
                     product_id TEXT, product_version TEXT, document_id TEXT,
@@ -41,7 +50,7 @@ def build_sparse_index(root: Path, source_root: Path) -> dict:
                 );
                 CREATE VIRTUAL TABLE chunk_fts USING fts5(
                     text, headings, content='chunks', content_rowid='rowid',
-                    tokenize='unicode61'
+                    tokenize='{tokenizer}'
                 );
             """)
             with connection:
@@ -63,7 +72,7 @@ def build_sparse_index(root: Path, source_root: Path) -> dict:
         temporary_path.unlink(missing_ok=True)
     manifest = {
         "corpus_hash": corpus_hash, "chunks": len(chunks), "source_files": len(files),
-        "index": str(target.relative_to(root)),
+        "index": str(target.relative_to(root)), "tokenizer": tokenizer,
         "build_wall_seconds": round(perf_counter() - started, 2),
         "index_bytes": target.stat().st_size,
     }

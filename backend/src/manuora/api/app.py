@@ -167,7 +167,10 @@ def pipeline() -> tuple[HybridRetriever, QwenReranker, ManuoraGraphGenerator]:
     if not collection:
         raise ValueError("Qwen full-corpus collection is not configured yet")
     config = IndexConfig.load(ROOT / options["embedding_config"], ROOT)
-    retriever = HybridRetriever(config, collection, sparse_path())
+    arm = options.get("retrieval") or {}  # experiment S; the defaults are production
+    retriever = HybridRetriever(config, collection, sparse_path(),
+                                lexical=arm.get("lexical") or "sqlite", fusion=arm.get("fusion") or "python",
+                                rrf_k=int(arm.get("rrf_k") or 60), lexical_collection=arm.get("lexical_collection"))
     reranker = QwenReranker(**options["reranker"])
     return retriever, reranker, conversation_generator()
 
@@ -182,6 +185,9 @@ def qdrant_status(options: dict) -> dict:
     """Is the dense collection reachable? (remote Qdrant: one HTTP call; local store: the folder exists)."""
     config = IndexConfig.load(ROOT / options["embedding_config"], ROOT)
     collection = options["dense_collection"]
+    if ((options.get("retrieval") or {}).get("lexical") or "sqlite") != "sqlite":  # BM25 lives in Qdrant too
+        from manuora.retrieval.qdrant_lexical import lexical_collection_name
+        collection = options["retrieval"].get("lexical_collection") or lexical_collection_name(collection)
     if config.store["mode"] == "local":
         path = config.location("path")
         return {"ok": path.exists(), "detail": f"local store {path}"}
