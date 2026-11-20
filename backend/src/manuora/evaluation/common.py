@@ -62,13 +62,13 @@ def generation_config():
     return settings()["generation"]
 
 
-def call(messages, max_tokens=360):
-    """One deterministic chat completion against the configured local model."""
+def call(messages, max_tokens=360, temperature=0.0):
+    """One chat completion against the configured local model (deterministic unless temperature > 0)."""
     import urllib.request
 
     cfg = generation_config()
     tick = time.perf_counter()
-    payload = dict(model=cfg["model"], messages=messages, temperature=0, max_tokens=max_tokens, stream=False)
+    payload = dict(model=cfg["model"], messages=messages, temperature=temperature, max_tokens=max_tokens, stream=False)
     req = urllib.request.Request(cfg["url"], json.dumps(payload).encode(), {"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=240) as response:
         result = json.load(response)

@@ -36,9 +36,20 @@ generation:
     citation instead.
 conversation:
   db_path: data/conversations/chat.sqlite
-  # Four-action context router. TF-IDF is available as an experiment/config option.
-  context_router_method: rules
+  # Router (experiment R, adopted 2026-11-20 by user decision; see experiments/router_finetune/README.md):
+  # F3, Qwen3-0.6B fine-tuned, served by llama-server (scripts/router/serve_router.py). When that server is
+  # unreachable or its JSON unusable, the TF-IDF classifier C3 routes instead. Back to the old rules:
+  # context_router_method: rules and context_rules: v1.
+  context_router_method: llm
   context_router_model_path: null
+  context_router_llm:
+    backend: llamacpp
+    url: http://127.0.0.1:8091
+    prompt: v2
+    fallback_classifier: data/models/router_tfidf_40d18fade2.joblib
+  # Context rules: v1 (original) | v2 (experiment R: pronouns resolved inside the question, version
+  # normalization, comparison scopes, several products, "latest"). The learned router needs v2.
+  context_rules: v2
   history_token_budget: 1400
   summarize: true
   # Token pressure is always checked. null disables the additional count trigger.

@@ -17,6 +17,14 @@ A case:
                 or null (negatives)
     absence_checks  [{"find": [regex], "matches": 0}] for negatives
     tags, source (legacy file/id it came from), added (date), expected_behavior (free text, optional)
+    ui          optional {"product_id", "product_version"}: what the chat page had selected. Without it, single-turn
+                cases select the case's product (and its version when there is exactly one); cases with history
+                select nothing, so scope must come from the conversation.
+    route       optional expected routing decision, overriding the one derived from the fields above:
+                {"action": "direct" | "rewrite" | "clarify" | "edit" | "chat" (or a list of acceptable actions),
+                 "product": id or null, "versions": [...]}
+Cross-product conversation cases (scope comes only from history, or a deliberate conflict) use product_id "".
+Tag "routing_only" marks a case that only the routing tier scores (it needs no gold).
 """
 from __future__ import annotations
 
@@ -37,6 +45,49 @@ STATUSES = {"draft", "checked", "reviewed", "retired"}
 SCORED = {"checked", "reviewed"}
 EXPECTS = {"answer", "abstain", "premise", "clarify", "edit"}
 REQUIRED = ("id", "category", "split", "status", "product_id", "versions", "question", "expect")
+ACTIONS = {"direct", "rewrite", "clarify", "edit", "chat"}
+
+
+def is_public(case: dict) -> bool:
+    """Public manuals, or a cross-product case ("") that names only public products."""
+    return case["product_id"] in PUBLIC_PRODUCTS or case["product_id"] == ""
+
+
+def versions_of(case: dict) -> list[str]:
+    return [str(v) for v in case.get("versions") or [] if v not in ("None", "", None)]
+
+
+def ui_of(case: dict) -> dict:
+    """What the chat page had selected for this case (see the module docstring)."""
+    if "ui" in case:
+        return {k: case["ui"].get(k) for k in ("product_id", "product_version")}
+    if case.get("history"):
+        return {"product_id": None, "product_version": None}
+    versions = versions_of(case)
+    return {"product_id": case["product_id"] or None, "product_version": versions[0] if len(versions) == 1 else None}
+
+
+def expected_route(case: dict) -> dict:
+    """{"actions": set of acceptable actions, "product", "versions" (set), "needs": "one" | "many"}.
+
+    Derived unless the case gives `route`: a question that should be answered, declined or corrected must
+    reach retrieval (direct; rewrite when it continues earlier turns), clarify and edit cases expect those.
+    """
+    given = case.get("route") or {}
+    if "action" in given:
+        actions = set(given["action"] if isinstance(given["action"], list) else [given["action"]])
+    elif case["expect"] in ("clarify", "edit"):
+        actions = {case["expect"]}
+    elif case.get("history"):
+        standalone = {"explicit_switch", "standalone_after_topic"} & set(case.get("tags") or [])
+        actions = {"direct"} if standalone else {"rewrite"}
+    else:
+        actions = {"direct"}
+    groups = len((case.get("gold") or {}).get("span_groups") or [])
+    return {"actions": actions,
+            "product": given.get("product", case["product_id"] or None),
+            "versions": set(given.get("versions", versions_of(case))),
+            "needs": given.get("needs") or ("many" if case["category"] == "workflow" and groups >= 2 else "one")}
 
 
 def read_file(path: Path) -> list[dict]:
@@ -54,7 +105,7 @@ def load(split: str | None = "dev", private: bool = True, statuses=SCORED, **fil
     """Scorable cases. filters match case fields exactly, e.g. category="workflow", product_id="qgis"."""
     cases = read_file(PUBLIC) + (read_file(PRIVATE) if private else [])
     for case in cases:
-        case["_private"] = case["product_id"] not in PUBLIC_PRODUCTS
+        case["_private"] = not is_public(case)
     return [c for c in cases
             if (split is None or c["split"] == split) and (statuses is None or c["status"] in statuses)
             and all(c.get(k) == v for k, v in filters.items())]
@@ -72,13 +123,20 @@ def validate(cases: list[dict], public: bool) -> list[str]:
         for key, allowed in (("category", CATEGORIES), ("split", SPLITS), ("status", STATUSES), ("expect", EXPECTS)):
             if c[key] not in allowed:
                 errors.append(f"{where}: {key}={c[key]!r} not in {sorted(allowed)}")
-        if public and c["product_id"] not in PUBLIC_PRODUCTS:
+        if public and not is_public(c):
             errors.append(f"{where}: product {c['product_id']!r} belongs in the private bench file")
+        if c["product_id"] == "" and c["category"] != "conversation":
+            errors.append(f"{where}: only conversation cases may leave product_id empty")
         if not isinstance(c["versions"], list):
             errors.append(f"{where}: versions must be a list")
+        route = c.get("route") or {}
+        actions = route.get("action", [])
+        if any(a not in ACTIONS for a in (actions if isinstance(actions, list) else [actions])):
+            errors.append(f"{where}: route.action must be among {sorted(ACTIONS)}")
         gold = c.get("gold")
-        if c["expect"] == "answer" and c["status"] in SCORED and not gold:
-            errors.append(f"{where}: an answerable scored case needs gold")
+        routing_only = "routing_only" in (c.get("tags") or [])
+        if c["expect"] == "answer" and c["status"] in SCORED and not gold and not routing_only:
+            errors.append(f"{where}: an answerable scored case needs gold (or tag routing_only)")
         if gold and not (gold.get("span_groups") or gold.get("required_facts")):
             errors.append(f"{where}: gold needs span_groups or required_facts")
     for case_id, n in Counter(c.get("id") for c in cases).items():
@@ -124,7 +182,7 @@ def mark(status: str, ids: list[str], note: str | None = None) -> None:
 
 def stats() -> str:
     cases = read_file(PUBLIC) + read_file(PRIVATE)
-    table = Counter((c["split"], c["category"], c["status"], c["product_id"] in PUBLIC_PRODUCTS) for c in cases)
+    table = Counter((c["split"], c["category"], c["status"], is_public(c)) for c in cases)
     lines = ["split    category      status    public  n"]
     lines += [f"{s:8} {cat:13} {st:9} {'yes' if pub else 'no':6}  {n}" for (s, cat, st, pub), n in sorted(table.items())]
     return "\n".join(lines)
@@ -175,8 +233,11 @@ def review_page(out: Path, split: str | None = None, category: str | None = None
             parts.append("<li>must not be in the manual: " + escape(", ".join(p for a in c["absence_checks"] for p in a["find"])) + "</li>")
         history = "".join(f"<div class=hist><b>{escape(h['role'])}:</b> {escape(h['content'])}</div>" for h in c.get("history", []))
         blocks.append(f"<section><label><input type=checkbox value='{escape(c['id'])}'> <b>{escape(c['id'])}</b></label> "
-                      f"<span class=meta>{escape(c['category'])} · {escape(c['split'])} · {escape(c['product_id'])} "
-                      f"{escape(', '.join(c['versions']))} · expect {escape(c['expect'])} · {escape(c.get('source', ''))}</span>"
+                      f"<span class=meta>{escape(c['category'])} · {escape(c['split'])} · {escape(c['product_id'] or 'any product')} "
+                      f"{escape(', '.join(c['versions']))} · expect {escape(c['expect'])}"
+                      + (f" · route {escape(json.dumps(c['route']))}" if c.get("route") else "")
+                      + (f" · page selection {escape(json.dumps(c['ui']))}" if c.get("ui") else "")
+                      + f" · {escape(c.get('source', ''))}</span>"
                       f"{history}<p class=question>{escape(c['question'])}</p>"
                       + (f"<p class=meta>{escape(c['expected_behavior'])}</p>" if c.get("expected_behavior") else "")
                       + f"<ol>{''.join(parts)}</ol></section>")

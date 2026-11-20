@@ -41,6 +41,10 @@ router = [
     "scikit-learn>=1.7,<2",
     "sentence-transformers>=5.7,<6",
 ]
+# Experiment R: LoRA routers (scripts/router/train_lora.py) and running them (context_router_method: llm).
+router-train = [
+    "peft>=0.21,<1",
+]
 
 [tool.setuptools]
 package-dir = {"" = "backend/src"}

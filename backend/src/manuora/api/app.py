@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import os
 import re
@@ -23,8 +24,9 @@ from pydantic import BaseModel, Field
 
 from manuora.generation.local import ManuoraGraphGenerator
 from manuora.generation.model_control import is_loaded, load_model, unload_model
+from manuora.generation.router import asks_latest, latest_note, newest_version
 from manuora.api.grounding import VersionIndex, missing_terms, passage_text, register_products, version_reply
-from manuora.api.routing import answer_lacks_support, early_response, resolve_scope
+from manuora.api.routing import answer_lacks_support, early_response
 from manuora.library import catalog
 from manuora.library.indexer import LibraryIndex
 from manuora.library.jobs import TYPES as MANUAL_TYPES, Library
@@ -140,6 +142,10 @@ def sparse_path() -> Path:
     return resolve_path(settings()["sparse_index"])
 
 
+CHAT_RESPONSE = ("I can help with questions about the product manuals here, and show the pages I used. "
+                 "What would you like to find?")
+
+
 @lru_cache(maxsize=1)
 def conversation_generator() -> ManuoraGraphGenerator:
     options = settings()
@@ -150,6 +156,7 @@ def conversation_generator() -> ManuoraGraphGenerator:
     memory = dict(options["conversation"])
     if memory.get('context_router_model_path'):
         memory['context_router_model_path']=str(ROOT / memory['context_router_model_path'])
+    memory["router_root"] = str(ROOT)
     db_path = resolve_path(memory.pop("db_path"))
     db_path.parent.mkdir(parents=True, exist_ok=True)
     evidence = options["evidence"]
@@ -402,13 +409,17 @@ def _chat(request: ChatRequest, progress=None) -> dict:
             documents=documents, ui_scope={'product_id':request.product_id,
                 'product_version':request.product_version,'document_id':request.document_id})
         response = early_response(request.question, settings()["assistant_name"],
-                                  {row["product_id"] for row in documents})
+                                  {row["product_id"] for row in documents},
+                                  rules=(settings().get("conversation") or {}).get("context_rules", "v1"),
+                                  newest={p: newest_version(p, documents) for p in {r["product_id"] for r in documents}})
         if response is not None:
             return reply(response, kind='chat')
         turn = generator.prepare_turn(request.question,thread_id=conversation_id,documents=documents,context=context)
         lap("route")
         if turn['action']=='clarify':
             return reply(turn['reason'],kind='clarify')
+        if turn['action']=='chat':  # a learned router's chat decision (greetings are answered earlier)
+            return reply(CHAT_RESPONSE, kind='chat')
         if turn['action']=='edit_previous_answer':
             edited=generator.edit_previous_answer(request.question,context=context)
             turn['reason'] += '; previous answer retained because edit could not be verified' if edited.get('fallback') else ''
@@ -429,13 +440,25 @@ def _chat(request: ChatRequest, progress=None) -> dict:
         with MODEL_LOCK:
             retriever, reranker, generator = pipeline()
         controls = settings()["retrieval"]
-        scope = turn['scope']
-        searched = {"products": [str(scope['product_id'])] if scope.get('product_id') else [],
-                    "versions": [str(scope['product_version'])] if scope.get('product_version') else []}
-        candidates = retriever.search(
-            turn['query'], **turn['scope'],
-            candidates=controls["candidates_per_method"],
-        )
+        scope = {k: turn['scope'].get(k) for k in ('product_id', 'product_version', 'document_id')}
+        versions = turn['scope'].get('versions') or []
+        several = turn['scope'].get('products') or []
+        searched = {"products": [str(p) for p in several] if len(several) > 1 else
+                                [str(scope['product_id'])] if scope['product_id'] else [],
+                    "versions": [] if len(several) > 1 else [str(v) for v in versions] if len(versions) > 1 else
+                                [str(scope['product_version'])] if scope['product_version'] else []}
+        if len(several) > 1:
+            # Several products (round 3 convention): search each, interleave by rank so each reaches the reranker.
+            lists = [retriever.search(turn['query'], product_id=p, product_version=None, document_id=None,
+                                      candidates=controls["candidates_per_method"]) for p in several]
+            candidates = [hit for rank in itertools.zip_longest(*lists) for hit in rank if hit is not None]
+        elif len(versions) > 1:
+            # A comparison (rules v2): search each version, then interleave so every version reaches the reranker.
+            candidates = retriever.search_versions(
+                turn['query'], product_id=scope['product_id'], versions=versions,
+                document_id=scope['document_id'], candidates=controls["candidates_per_method"])
+        else:
+            candidates = retriever.search(turn['query'], **scope, candidates=controls["candidates_per_method"])
         lap("retrieve")
         step("rerank")
         ranked = reranker.rerank(
@@ -500,6 +523,12 @@ def _chat(request: ChatRequest, progress=None) -> dict:
                 verdict = generator.check_support(request.question, answer, evidence)
             if not verdict["supported"]:
                 return reply(UNCERTAIN_RESPONSE, kind='abstain', outcome='support_check')
+        # "latest" was read as the newest version in the library; say so (user decision 2026-11-20).
+        product = turn['scope'].get('product_id')
+        newest = newest_version(product, documents) if product else None
+        if newest and asks_latest(request.question, product) and newest in (
+                [str(v) for v in turn['scope'].get('versions') or []] + [str(turn['scope'].get('product_version'))]):
+            answer = f"{latest_note(product, newest)}\n\n{answer}"
         return reply(answer, outcome='answered', sources=[
             {"citation": number, "chunk_id": hit["chunk_id"],
              "document_id": hit["document_id"], "product_id": hit["product_id"],

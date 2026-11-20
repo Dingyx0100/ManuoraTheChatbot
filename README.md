@@ -7,7 +7,7 @@ When the manuals don't support an answer, Manuora says so instead of guessing.
 ## How a question is answered
 
 ```
-question → rules router (direct / rewrite follow-up / clarify / edit previous answer)
+question → router (direct / rewrite follow-up / clarify / edit previous answer / chat), plus product and versions
          → hybrid retrieval: Qwen3-Embedding-0.6B in Qdrant + BM25 sparse vectors, fused by Qdrant (RRF k=60), 30 candidates each
          → Qwen3-Reranker-0.6B on the top 12, then evidence selection: keep 4, drop scores below 3.0
          → Qwen3-8B (2048-token context, 4 × 850-character excerpts) with LangGraph memory
@@ -21,7 +21,7 @@ All settings are in [config/assistant.yaml](config/assistant.yaml).
 | Path | What's there |
 |---|---|
 | `backend/src/manuora/api/` | FastAPI app (`app.py`), routing and scope rules (`routing.py`), answer grounding checks (`grounding.py`) |
-| `backend/src/manuora/generation/` | LangGraph conversation generator (`local.py`), follow-up and context router (`context.py`), Docker model load/unload (`model_control.py`) |
+| `backend/src/manuora/generation/` | LangGraph conversation generator (`local.py`), context rules (`context.py`), the router and its shared checks (`router.py`), Docker model load/unload (`model_control.py`) |
 | `backend/src/manuora/retrieval/` | Qdrant indexing, BM25, hybrid fusion, reranker, evidence selection (`evidence.py`), optional features that are off by default (`steps.py`, `outlines.py`) |
 | `backend/src/manuora/ingestion/` | PDF → profile → Docling parse → selective OCR → sections → tables → quality report → retrieval chunks |
 | `backend/src/manuora/knowledge/` | Product manifest schemas |
@@ -29,7 +29,7 @@ All settings are in [config/assistant.yaml](config/assistant.yaml).
 | `eval/` | The benchmark (`bench/cases.jsonl`), release gate rules (`gates.yaml`), baselines per tier and split (`baselines/`), holdout usage log |
 | `frontend/` | The web app: `index.html` shell, `assets/app.js` (chat, model controls), `assets/library.js` (Library page), `assets/app.css` (light and dark themes) |
 | `backend/src/manuora/library/` | Library: manifests catalog (`catalog.py`), upload jobs (`jobs.py`), incremental add/remove in the indexes (`indexer.py`) |
-| `scripts/` | Pipeline entry points (below), `maintenance/` (parsing-quality tools), `review/` (HTML review pages) |
+| `scripts/` | Pipeline entry points (below), `maintenance/` (parsing-quality tools), `review/` (HTML review pages), `router/` (routing data, training, router server) |
 | `config/` | Assistant and embedding configs |
 | `tests/unit/` | Unit tests; no models or manuals needed |
 
@@ -89,6 +89,26 @@ Open **Library** in the sidebar and drop PDFs. Each file gets a suggested produc
 `/health` reports that the process is up. `/ready` checks the settings, the BM25 index and Qdrant, and reports whether the chat model is loaded.
 
 Manuora serves one user at a time: chat requests are serialized by a single lock.
+
+### Router
+
+The router decides what a message needs: search it as written, rewrite a follow-up into a standalone question,
+ask for clarification, reformat the answer on screen, or reply as small talk. It also picks the product and
+versions. Messages naming several products are searched once per product, and "latest" means the newest version
+in the library (the answer says which).
+
+`conversation.context_router_method` in `config/assistant.yaml`:
+
+- `llm` (default): a fine-tuned Qwen3-0.6B served by llama-server. Start it with
+  `python scripts/router/serve_router.py` (`--stop` to stop). It needs the router model in `data/models/`.
+- If that server is unreachable or answers with unusable JSON, the TF-IDF classifier in
+  `context_router_llm.fallback_classifier` routes instead. Without that file, the rules route.
+- `rules` with `context_rules: v1`: the original rules router, no model files needed.
+
+The trained router models are not in the repository. `scripts/router/` holds the scripts that generate the
+synthetic routing data and train the classifiers and the LoRA router. Every router's decision passes the same
+checks: products and versions must exist, a page selection can't contradict the question, and an edit needs an
+answer on screen.
 
 ## Testing and releases
 

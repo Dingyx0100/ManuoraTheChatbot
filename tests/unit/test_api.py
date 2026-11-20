@@ -9,7 +9,8 @@ from uuid import uuid4
 import pytest
 import yaml
 from manuora.api.app import app
-from manuora.api.routing import answer_lacks_support, early_response, resolve_scope
+from manuora.api.routing import answer_lacks_support, early_response
+from manuora.generation.context import explicit_scope
 
 
 def test_health_returns_ok() -> None:
@@ -25,7 +26,14 @@ def test_scope_routes_weather_and_explicit_version() -> None:
     assert early_response("How is the weather now?", "Manuora", {"nextcloud"}) is not None
     assert early_response("How do I configure the weather app in Nextcloud?", "Manuora", {"nextcloud"}) is None
     assert early_response("What's the weather in Nextcloud now?", "Manuora", {"nextcloud"}) is not None
-    assert resolve_scope("Where is SMTP in Nextcloud 36?", documents, None, None) == ("nextcloud", "36", None)
+    scope, _, conflict = explicit_scope("Where is SMTP in Nextcloud 36?", {}, documents)
+    assert (scope["product_id"], scope["product_version"], conflict) == ("nextcloud", "36", None)
+    # Rules v2 also answers greetings and thanks with a few extra words, but never a question.
+    assert early_response("hi there!", "Manuora", {"nextcloud"}) is None
+    assert early_response("hi there!", "Manuora", {"nextcloud"}, rules="v2") is not None
+    assert early_response("thanks, that helped a lot", "Manuora", {"nextcloud"}, rules="v2") == "You're welcome!"
+    assert early_response("thanks, how do I export it?", "Manuora", {"nextcloud"}, rules="v2") is None
+    assert early_response("hello Nextcloud", "Manuora", {"nextcloud"}, rules="v2") is None
     assert answer_lacks_support("The manual does not provide configuration instructions [1].")
     assert not answer_lacks_support("Open the administration settings [1].")
     # The marker after an explanation is still a refusal (negative N09 in experiment N).
@@ -287,7 +295,8 @@ def test_api_commits_only_displayed_replies_including_early_and_rejected_answers
     local, payloads, replies = memory_model_transport
     api=importlib.import_module('manuora.api.app')
     config=dict(api.settings())
-    config['conversation']=dict(config['conversation'],db_path=str(tmp_path/'displayed.sqlite'),summarize=False)
+    config['conversation']=dict(config['conversation'],db_path=str(tmp_path/'displayed.sqlite'),summarize=False,
+        context_router_method='rules',context_rules='v1')
     monkeypatch.setattr(api,'settings',lambda:config)
     hit={'chunk_id':'one','document_id':'guide','product_id':'nextcloud','product_version':'36',
          'pages':[1],'headings':['SMTP'],'text':'PRIVATE_EVIDENCE_BODY','retrievers':['dense'],'rerank_score':6.0}
@@ -327,7 +336,8 @@ def test_four_action_api_paths_share_rewrite_query_and_keep_edit_citations(memor
     local,payloads,replies=memory_model_transport
     api=importlib.import_module('manuora.api.app')
     configuration=dict(api.settings())
-    configuration['conversation']=dict(configuration['conversation'],db_path=str(tmp_path/'routes.sqlite'),summarize=False)
+    configuration['conversation']=dict(configuration['conversation'],db_path=str(tmp_path/'routes.sqlite'),summarize=False,
+        context_router_method='rules',context_rules='v1')
     monkeypatch.setattr(api,'settings',lambda:configuration)
     hit={'chunk_id':'smtp','document_id':'guide','product_id':'nextcloud','product_version':'36',
          'pages':[1],'headings':['SMTP'],'text':'Use SMTP settings.','rerank_score':7.0,'retrievers':['dense']}

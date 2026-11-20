@@ -1,5 +1,6 @@
 ﻿"""Run the benchmark through the production chat path and write a scorecard.
 
+    python -m manuora.evaluation.run --tier routing                        # router decisions only, seconds, no models
     python -m manuora.evaluation.run --tier retrieval                      # dev split, no LLM
     python -m manuora.evaluation.run --tier answer                         # also generates answers
     python -m manuora.evaluation.run --tier retrieval --set evidence.gate=relative --set evidence.relative_margin=8
@@ -11,7 +12,9 @@ retrieval, rerank, evidence selection, packing, generation, grounding checks), i
 whose history is a throwaway database. `--set key=value` changes settings for this run only, the same
 keys as config/assistant.yaml. Results: data/eval_runs/<run>/ (records.jsonl, scorecard.json, scorecard.md).
 
-Conversation cases are listed in the bench but not scored yet: they need their history replayed.
+The routing tier replays each case's earlier turns into a fresh memory and scores only the router's decision
+(action, product, versions, needs); it scores every category, including conversation cases. The retrieval
+and answer tiers do not replay history yet, so they leave conversation and routing-only cases out.
 """
 from __future__ import annotations
 
@@ -74,10 +77,105 @@ def _digest(value) -> str:
 
 # --------------------------------------------------------------------------- one case
 def request_for(case: dict) -> dict:
-    """What the chat page would send: the product, and the version when the case names exactly one."""
-    versions = [v for v in case["versions"] if v not in ("None", "", None)]
-    return {"question": case["question"], "product_id": case["product_id"] or None,
-            "product_version": versions[0] if len(versions) == 1 else None}
+    """What the chat page would send: its selection (bench.ui_of) and the question."""
+    return {"question": case["question"], **bench.ui_of(case)}
+
+
+# --------------------------------------------------------------------------- routing tier
+def make_router(conversation: dict, documents: list[dict] | None = None):
+    """The decider the app would build from these conversation settings (generation/router.build_router)."""
+    from manuora.generation.router import build_router
+
+    return build_router(conversation, documents, ROOT)
+
+
+def replay(case: dict, documents: list[dict], router, rules: str = "v1", assistant_name: str = "Manuora"):
+    """Replay the case's earlier turns into a fresh memory; return decide(question) -> (context, decision).
+
+    Each earlier turn is routed by the same router; a turn it would not answer (clarify, chat) does not
+    become task memory, exactly as in the app. Answers are placeholders: only routing is measured.
+    """
+    from manuora.api.routing import early_response
+    from manuora.generation.context import prepare_context, remember_reply
+    from manuora.generation.router import chat_decision, checked, route_with
+
+    products = {d["product_id"] for d in documents}
+    ui = bench.ui_of(case)
+    state = {"memory": {}, "last": None, "earlier": []}
+
+    def decide(question: str):
+        if early_response(question, assistant_name, products, rules=rules) is not None:
+            return None, chat_decision()
+        context = prepare_context(question, ui, documents, state["memory"], thread_id=case["id"], rules=rules)
+        context["last_displayed_reply"] = state["last"]
+        context["ui"] = ui
+        context["earlier"] = list(state["earlier"])
+        return context, checked(route_with(router, context), context, documents)
+
+    for turn, earlier in enumerate(h for h in case.get("history") or [] if h.get("role") == "user"):
+        context, decision = decide(earlier["content"])
+        answer = f"(earlier answer {turn + 1})"
+        kind = {"direct": "answer", "rewrite": "answer"}.get(decision.action, decision.action)
+        if context is not None:
+            state["memory"] = remember_reply(state["memory"], context, answer, [], turn_id=f"{case['id']}:{turn}",
+                                             kind=kind)
+        state["last"] = {"content": answer, "message_id": f"{case['id']}:{turn}", "sources": [], "truncated": False}
+        state["earlier"].append(earlier["content"])
+    return decide
+
+
+def route_case(case: dict, documents: list[dict], router, rules: str = "v1", assistant_name: str = "Manuora") -> dict:
+    """Route one case after replaying its history (see `replay`). No retrieval, no answer model."""
+    decide = replay(case, documents, router, rules, assistant_name)
+    tick = time.perf_counter()
+    _, decision = decide(case["question"])
+    ms = (time.perf_counter() - tick) * 1000
+    return score_route(case, decision, ms)
+
+
+def score_route(case: dict, decision, ms: float) -> dict:
+    expected = bench.expected_route(case)
+    got = decision.action
+    record = {"id": case["id"], "category": case["category"], "expect": case["expect"], "private": case["_private"],
+              "seconds": round(ms / 1000, 5), "ms": round(ms, 3), "action": got, "expected": sorted(expected["actions"]),
+              "reason": decision.reason, "product": decision.product, "versions": decision.versions,
+              "products": list(getattr(decision, "products", None) or []),
+              "needs": len(decision.needs), "action_ok": got in expected["actions"],
+              "false_clarify": got == "clarify" and "clarify" not in expected["actions"],
+              "missed_clarify": "clarify" in expected["actions"] and got != "clarify",
+              "wrong_direct": not expected["actions"] & {"direct", "rewrite"} and got in ("direct", "rewrite")}
+    if expected["actions"] & {"direct", "rewrite"} and got in ("direct", "rewrite"):
+        wanted = expected["product"]
+        if isinstance(wanted, list):  # several products: every one, searched separately
+            product_ok = set(getattr(decision, "products", None) or []) == set(wanted)
+        else:
+            product_ok = (decision.product or None) == wanted or wanted is None
+        record["scope_ok"] = product_ok and (not expected["versions"] or set(decision.versions) == expected["versions"])
+        record["needs_ok"] = (len(decision.needs) >= 2) == (expected["needs"] == "many")
+    record["route_ok"] = record["action_ok"] and record.get("scope_ok", True)
+    return record
+
+
+def documents_for(effective: dict) -> list[dict]:
+    """The (product, version, document) rows the page offers, from the BM25 index these settings use."""
+    import sqlite3
+    from manuora.api.app import resolve_path
+
+    path = resolve_path(effective["sparse_index"])
+    db = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    try:
+        rows = db.execute("SELECT DISTINCT product_id, product_version, document_id FROM chunks").fetchall()
+    finally:
+        db.close()
+    return [{"product_id": p, "product_version": v, "document_id": d} for p, v, d in rows]
+
+
+def evaluate_routing(cases: list[dict], effective: dict, progress=print) -> list[dict]:
+    conversation = effective.get("conversation") or {}
+    documents = documents_for(effective)
+    router = make_router(conversation, documents)
+    rules = conversation.get("context_rules", "v1")
+    return [route_case(c, documents, router, rules, effective.get("assistant_name", "Manuora")) for c in cases]
 
 
 def score_case(case: dict, body: dict, seconds: float, tier: str = "answer") -> dict:
@@ -85,9 +183,11 @@ def score_case(case: dict, body: dict, seconds: float, tier: str = "answer") -> 
     trace = body.get("trace") or {}
     stages = trace.get("stages") or {}
     record = {"id": case["id"], "category": case["category"], "expect": case["expect"],
-              "private": case["product_id"] not in bench.PUBLIC_PRODUCTS, "outcome": trace.get("outcome"),
+              "private": not bench.is_public(case), "outcome": trace.get("outcome"),
               "kind": body.get("kind"), "seconds": round(seconds, 2), "stage_ids": {
                   s: [p["chunk_id"] for p in stages.get(s, [])] for s in STAGES if s in stages}}
+    if stages.get("reranked"):  # the best reranker score: how far above or below the gate the case sits
+        record["top_score"] = stages["reranked"][0].get("rerank_score")
     if bench.has_gold(case) and case["expect"] == "answer":
         scores = {s: bench.evidence_score(case, stages.get(s, [])) for s in STAGES}
         record["complete"] = {s: bool(v["complete"]) for s, v in scores.items()}
@@ -152,8 +252,19 @@ def aggregate(records: list[dict], labels: dict[str, str] | None = None) -> dict
                 row["shown"] = len(shown)
                 row["made_up"] = sum(labels.get(r["label_key"]) == "made_up" for r in shown)
                 row["unlabelled"] = sum(r["label_key"] not in labels for r in shown)
-        seconds = [r["seconds"] for r in rs]
-        row["p50_seconds"], row["p95_seconds"] = _p(seconds, 0.5), _p(seconds, 0.95)
+        routed = [r for r in rs if "action_ok" in r]
+        if routed:
+            for key in ("route_ok", "action_ok", "false_clarify", "missed_clarify", "wrong_direct"):
+                row[key] = sum(r[key] for r in routed)
+            for key in ("scope_ok", "needs_ok"):
+                scoped = [r for r in routed if key in r]
+                if scoped:
+                    row[key] = sum(r[key] for r in scoped)
+            ms = [r["ms"] for r in routed]
+            row["p50_ms"], row["p95_ms"] = _p(ms, 0.5), _p(ms, 0.95)
+        else:
+            seconds = [r["seconds"] for r in rs]
+            row["p50_seconds"], row["p95_seconds"] = _p(seconds, 0.5), _p(seconds, 0.95)
         out[category] = row
     return out
 
@@ -167,7 +278,8 @@ def scorecard(records: list[dict], meta: dict) -> dict:
 
 COLUMNS = ("n", "with_gold", "candidates_complete", "reranked_complete", "selected_complete", "packed_complete",
            "answered", "cited_complete", "abstained", "declined", "shown", "made_up", "unlabelled",
-           "p50_seconds", "p95_seconds")
+           "route_ok", "action_ok", "false_clarify", "missed_clarify", "wrong_direct", "scope_ok", "needs_ok",
+           "p50_seconds", "p95_seconds", "p50_ms", "p95_ms")
 
 
 def markdown(card: dict) -> str:
@@ -187,9 +299,15 @@ def markdown(card: dict) -> str:
         lines += [f"| {cat} | " + " | ".join("" if r.get(c) is None else str(r.get(c)) for c in cols) + " |"
                   for cat, r in rows.items()]
         lines.append("")
-    lines += ["`*_complete`: cases whose gold evidence is all present after that stage. `cited_complete`: the answer's "
-              "citations alone cover the gold. `declined`: a negative that was not answered from the manuals. "
-              "`made_up`/`unlabelled`: shown answers to negatives, by your labels (`python -m manuora.evaluation.run label`)."]
+    if meta["tier"] == "routing":
+        lines += ["`route_ok`: right action and, for questions that reach retrieval, the right product and versions. "
+                  "`false_clarify`: asked for clarification although the question should be searched. `missed_clarify`: "
+                  "should have asked. `wrong_direct`: searched a question that should be clarified or edited. "
+                  "`scope_ok`/`needs_ok`: of the questions searched, right scope / right number of needs (one vs several)."]
+    else:
+        lines += ["`*_complete`: cases whose gold evidence is all present after that stage. `cited_complete`: the answer's "
+                  "citations alone cover the gold. `declined`: a negative that was not answered from the manuals. "
+                  "`made_up`/`unlabelled`: shown answers to negatives, by your labels (`python -m manuora.evaluation.run label`)."]
     return "\n".join(lines) + "\n"
 
 
@@ -242,23 +360,36 @@ def evaluate(cases: list[dict], tier: str, overrides: dict, progress=print) -> l
     return records
 
 
+def select_cases(tier: str, split: str, private: bool, filters: dict, limit: int | None,
+                 drafts: bool = False) -> tuple[list[dict], list[str]]:
+    """(cases this tier scores, categories it leaves out). The routing tier scores every category;
+    the other tiers leave out conversation cases (no history replay yet) and routing-only cases."""
+    statuses = bench.SCORED | ({"draft"} if drafts else set())
+    cases = bench.load(split, private=private, statuses=statuses, **filters)
+    if tier == "routing":
+        return cases[:limit], []
+    skipped = sorted({c["category"] for c in cases if c["category"] in NOT_SCORED})
+    keep = [c for c in cases if c["category"] not in NOT_SCORED and "routing_only" not in (c.get("tags") or [])]
+    return keep[:limit], skipped
+
+
 def run(tier: str, split: str, overrides: dict, name: str | None, release: bool, private: bool,
-        filters: dict, limit: int | None) -> Path:
+        filters: dict, limit: int | None, drafts: bool = False) -> Path:
     if split == "holdout" and not release:
         raise SystemExit("The holdout is for release checks only: add --release (every holdout run is logged).")
-    cases = bench.load(split, private=private, **filters)
-    skipped = sorted({c["category"] for c in cases if c["category"] in NOT_SCORED})
-    cases = [c for c in cases if c["category"] not in NOT_SCORED][:limit]
+    cases, skipped = select_cases(tier, split, private, filters, limit, drafts)
     if not cases:
         raise SystemExit("no cases match")
     effective = effective_settings(overrides)
     started = datetime.now().strftime("%Y-%m-%d %H:%M")
-    name = name or (_digest(overrides) if overrides else "production")
-    out = RUNS / f"{datetime.now():%Y%m%d_%H%M}_{tier}_{split}_{name}"
+    name = (name or (_digest(overrides) if overrides else "production")) + ("-drafts" if drafts else "")
+    out = RUNS / f"{datetime.now():%Y%m%d_%H%M%S}_{tier}_{split}_{name}"
     out.mkdir(parents=True, exist_ok=False)
     print(f"{len(cases)} cases -> {out.relative_to(ROOT)}")
     if tier == "answer":
         records = _with_model(effective, overrides, lambda: evaluate(cases, tier, overrides))
+    elif tier == "routing":
+        records = evaluate_routing(cases, effective)
     else:
         records = evaluate(cases, tier, overrides)
     meta = {"name": name, "tier": tier, "split": split, "cases": len(records), "started": started,
@@ -344,7 +475,7 @@ def main(argv=None) -> None:
         label_shown(Path(argv[1]) if len(argv) > 1 else None)
         return
     parser = argparse.ArgumentParser(prog="python -m manuora.evaluation.run")
-    parser.add_argument("--tier", choices=("retrieval", "answer"), required=True)
+    parser.add_argument("--tier", choices=("routing", "retrieval", "answer"), required=True)
     parser.add_argument("--split", choices=sorted(bench.SPLITS), default="dev")
     parser.add_argument("--set", dest="sets", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--name", help="short label for the run folder (default: production or a digest of --set)")
@@ -353,9 +484,12 @@ def main(argv=None) -> None:
     parser.add_argument("--public-only", action="store_true", help="leave out the local-only cases")
     parser.add_argument("--limit", type=int, help="first N cases (smoke test)")
     parser.add_argument("--release", action="store_true", help="required for --split holdout")
+    parser.add_argument("--drafts", action="store_true",
+                        help="also score draft cases (exploration only; never promote such a run)")
     args = parser.parse_args(argv)
     filters = {k: v for k, v in (("category", args.category), ("product_id", args.product)) if v}
-    run(args.tier, args.split, parse_sets(args.sets), args.name, args.release, not args.public_only, filters, args.limit)
+    run(args.tier, args.split, parse_sets(args.sets), args.name, args.release, not args.public_only, filters,
+        args.limit, args.drafts)
 
 
 if __name__ == "__main__":

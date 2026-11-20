@@ -54,6 +54,145 @@ def reference_signals(question: str) -> dict:
             'local_references':local, 'method':'bounded_object_cues_v3'}
 
 
+# ---- rules v2 (experiment R). v1 above stays unchanged as the baseline arm.
+# Questions that start by returning to an earlier task ("Back to FreeCAD: ...", "OK, let's go back to ...").
+RETURN_V2 = re.compile(r'^\s*(?:(?:ok(?:ay)?|now|so|right)[,.]?\s+)?(?:let\'?s\s+)?(?:go(?:ing)?\s+)?'
+                       r'(?:back\s+to|return\s+to|resume)\b', re.I)
+EDIT_V2 = re.compile(EDIT.pattern + r'|'
+    r'\b(?:put|format|write|turn|give)\s+(?:that|it|this|your (?:last )?answer)\s+(?:as|in|into)\s+'
+    r'(?:a\s+)?(?:numbered\s+|bulleted\s+)?(?:list|bullet points|table|steps)\b|'
+    r'^\s*(?:(?:a\s+bit|much|even)\s+)?(?:shorter|briefer|simpler|longer)(?:\s+please)?[.!]?\s*$|'
+    r'\bmake\s+(?:that|it|this)\s+(?:shorter|longer|simpler|clearer|briefer)\b|'
+    r'\bsummari[sz]e\s+(?:that|it|this|your (?:last )?answer)\b|'
+    r'\bexplain\s+(?:that|it|this|your (?:last )?answer)\s+(?:again|in more detail|more simply|step by step)\b', re.I)
+SAME = re.compile(r'\bsame\s+(?:question|thing|steps|for)\b|'
+                  # "one" as a pronoun: "restore one", "pick another", "one of those"
+                  r'\b(?:restore|pick|choose|select|delete|remove|open|edit|use|create|add|share|change|move)\s+'
+                  r'(?:one|another)\b(?!\s+(?:of\s+(?:my|the|our)|more|by|at|per))|\bone\s+of\s+(?:them|those|these)\b', re.I)
+# Words that do not name anything on their own, so they cannot be what a pronoun refers to.
+VAGUE = {'same', 'other', 'others', 'thing', 'things', 'one', 'ones', 'stuff', 'again', 'there', 'here',
+         'way', 'part', 'instead', 'version', 'versions', 'fail', 'failed', 'work', 'works', 'undo', 'option', 'side'}
+# Question and auxiliary words: they frame a question but name nothing.
+QUESTION_WORDS = set('it its they them that those these which what about why when who whom whose did does done '
+                     'will was been being had got just also still now then very really any some all not yes '
+                     'okay sure there here'.split())
+# A bare version number of the named product, when it reads as a version ("... documented in 36?",
+# "compared with 35", "from 35 to 36"), not as a count ("12 users", "30 seconds").
+BARE_VERSION = re.compile(r'(?<![\w.])(?:in|with|from|between|to|than|since|like|vs\.?|versus|and|or|after|before|until|of)'
+                          r'\s+(?:version\s+)?v?(\d+(?:\.\d+)*)(?=\s*(?:$|[?,.;:)!]|(?:and|or|to|than|compared|'
+                          r'rather|because|so|but|manual|release|version|instead|too|still|anymore)\b))', re.I)
+CONTROL_REFERENCE = re.compile(r'\b(?:that|this|those|these)\s+(?:button|icon|option|setting|menu|dialog|tool|'
+                               r'field|tab|panel|one|ones)\b', re.I)
+VERSION_TOKEN = r'v?(\d+(?:\.\d+)*)'
+VERSION_JOIN = re.compile(r'\s*(?:,|/|and|or|vs\.?|versus|to|then)\s*(?:version\s+)?' + VERSION_TOKEN + r'\b', re.I)
+
+
+def content_terms(question: str, products) -> set[str]:
+    """Words in the question that can name a thing: no stop words, product ids, numbers or vague words."""
+    excluded = STOP | VAGUE | QUESTION_WORDS | {p.casefold() for p in products}
+    return {w for w in terms(question) if w not in excluded}
+
+
+def self_contained(question: str, products) -> bool:
+    """Rules v2: the question carries its own subject, so a pronoun in it refers inside the question.
+
+    "Can Nextcloud scan uploads for viruses? How do I set that up?" -> True (scan, uploads, viruses).
+    "How do I undo it?", "What does that button do?" -> False.
+    """
+    if CONTROL_REFERENCE.search(question):
+        return False
+    return len(content_terms(question, products)) >= 2
+
+
+def mentioned_versions(question: str, product: str, documents: list[dict]) -> tuple[list[str], list[str]]:
+    """Rules v2: (stored versions the question names for this product, written forms that match no manual).
+
+    A version counts after the product name ("KiCad 6", "Nextcloud v36"), after "version", or joined to a
+    counted version ("Nextcloud 35 and 36", "from KiCad 8 to 9"). Written forms are normalized against the
+    index ("6" -> "6.0"); a major-only form that matches several minors ("QGIS 3") adds nothing.
+    Only a product-prefixed form that matches nothing is reported as unknown.
+    """
+    from manuora.generation.router import known_versions, normalize_version
+
+    found, unknown = [], []
+
+    def add(token: str, strict: bool) -> bool:
+        matches = normalize_version(product, token, documents)
+        if len(matches) == 1:
+            if matches[0] not in found:
+                found.append(matches[0])
+            return True
+        if not matches and strict:
+            unknown.append(token)
+        return bool(matches)
+
+    anchor = re.compile(rf'\b(?:({re.escape(product)})\s+|version\s+)' + VERSION_TOKEN + r'\b', re.I)
+    position = 0
+    while (match := anchor.search(question, position)):
+        counted = add(match.group(2), strict=bool(match.group(1)))
+        position = match.end()
+        while counted and (joined := VERSION_JOIN.match(question, position)):
+            counted = add(joined.group(1), strict=False)
+            position = joined.end()
+    stored = set(known_versions(documents).get(product, []))
+    for bare in BARE_VERSION.finditer(question):
+        if bare.group(1) in stored and bare.group(1) not in found:  # exact stored versions only
+            found.append(bare.group(1))
+    return found, unknown
+
+
+def explicit_scope_v2(question: str, ui: dict, documents: list[dict]) -> tuple[dict, dict, str | None]:
+    """Like explicit_scope, but versions are normalized and several versions make a comparison scope."""
+    scope = {k: ui.get(k) or None for k in FIELDS}
+    origins = {k: 'ui' for k in FIELDS if scope[k]}
+    products = sorted({d['product_id'] for d in documents})
+    names = [p for p in products if re.search(rf'\b{re.escape(p)}\b', question, re.I)]
+    if len(names) > 1:
+        # Several products (round 3 convention, 2026-11-20): search each, answer for each; no versions.
+        if scope['product_id'] and scope['product_id'] not in names:
+            return scope, origins, 'The question and selected product disagree.'
+        names.sort(key=lambda p: re.search(rf'\b{re.escape(p)}\b', question, re.I).start())
+        scope.update(product_id=None, product_version=None, products=names)
+        origins['products'] = 'question'
+        return scope, origins, None
+    product = names[0] if names else scope['product_id']
+    if names:
+        if scope['product_id'] and scope['product_id'] != product:
+            return scope, origins, 'The question and selected product disagree.'
+        scope['product_id'], origins['product_id'] = product, 'question'
+    if product:
+        found, unknown = mentioned_versions(question, product, documents)
+        if unknown and not found:
+            return scope, origins, 'The explicitly named version is not in the available manuals.'
+        from manuora.generation.router import asks_latest, newest_version
+        newest = newest_version(product, documents)
+        if newest and newest not in found and asks_latest(question, product):
+            # "latest"/"newest"/"current version" means the newest version in the library (user decision).
+            found.append(newest)
+        if len(found) == 1:
+            if scope['product_version'] and str(scope['product_version']) != found[0]:
+                return scope, origins, 'The question and selected version disagree.'
+            scope['product_version'], origins['product_version'] = found[0], 'question'
+        elif len(found) > 1:
+            # A comparison: search each version (the page selection, if any, must be one of them).
+            if scope['product_version'] and str(scope['product_version']) not in found:
+                return scope, origins, 'The question and selected version disagree.'
+            scope['product_version'] = None
+            scope['versions'], origins['versions'] = found, 'question'
+    document = scope['document_id']
+    if document:
+        matches = [d for d in documents if d['document_id'] == document and all(
+            not scope[k] or str(d.get(k)) == str(scope[k]) for k in FIELDS[:2])]
+        if len(matches) != 1:
+            return scope, origins, 'The selected manual is missing or conflicts with the product/version.'
+        for k in FIELDS[:2]:
+            if not scope[k]:
+                scope[k], origins[k] = matches[0].get(k), 'ui_document'
+    if scope['product_version'] and not scope['product_id']:
+        return scope, origins, 'A version alone does not identify a product.'
+    return scope, origins, None
+
+
 def terms(text: str) -> set[str]:
     return {w.casefold() for w in re.findall(r'[\w.-]+', text) if len(w)>2 and w.casefold() not in STOP and not w.isdigit()}
 
@@ -95,10 +234,20 @@ def explicit_scope(question: str, ui: dict, documents: list[dict]) -> tuple[dict
     return scope, origins, None
 
 
+RULES = ("v1", "v2")
+
+
 def prepare_context(question: str, ui: dict, documents: list[dict], memory: dict,
-                    *, thread_id: str, max_turns: int = 2, max_chars: int = 500) -> dict:
-    """Return a proposal with provenance. Reading never changes stored state."""
-    scope, origins, conflict = explicit_scope(question, ui, documents)
+                    *, thread_id: str, max_turns: int = 2, max_chars: int = 500, rules: str = "v1") -> dict:
+    """Return a proposal with provenance. Reading never changes stored state.
+
+    rules: "v1" is the original rule set; "v2" (experiment R) see reference_signals_v2 / explicit_scope_v2.
+    """
+    if rules not in RULES:
+        raise ValueError(f"conversation.context_rules must be one of {RULES}")
+    v2 = rules == "v2"
+    products = {d['product_id'] for d in documents}
+    scope, origins, conflict = (explicit_scope_v2 if v2 else explicit_scope)(question, ui, documents)
     scope_conflict = conflict
     tasks = memory.get('tasks', [])
     active = next((t for t in tasks if t['id']==memory.get('active_task_id')), None)
@@ -106,6 +255,16 @@ def prepare_context(question: str, ui: dict, documents: list[dict], memory: dict
     follow, returning, edit = references['needs_prior_reference'], bool(RETURN.search(question)), bool(EDIT.search(question))
     switching = bool(re.search(r'\b(new topic|different question|switch to)\b',question,re.I))
     compatible = [t for t in tasks if all(not scope[k] or scope[k]==t['scope'].get(k) for k in FIELDS)]
+    if v2:
+        returning = bool(RETURN_V2.search(question)) and bool(tasks)
+        edit = bool(EDIT_V2.search(question))
+        follow = follow or bool(SAME.search(question))
+        continuing = bool(active and active in compatible and not switching)
+        # Without an earlier task to continue, a pronoun in a question that names its own subject refers
+        # inside the question; only a question with no subject of its own needs clarifying.
+        if follow and not continuing and self_contained(question, products):
+            follow = False
+            references = {**references, 'needs_prior_reference': False, 'resolved_in_question': True}
     excluded = set(STOP) | {d['product_id'].casefold() for d in documents}
     query_terms = terms(question)-excluded-{'back','return','resume','switch','topic','version','correction'}
     overlaps = [(len(query_terms & set(t['terms'])),t) for t in compatible]
@@ -129,6 +288,8 @@ def prepare_context(question: str, ui: dict, documents: list[dict], memory: dict
     if not selected and active and re.search(r'\b(correction|actually|meant)\b',question,re.I) and scope['product_id']==active['scope'].get('product_id'):
         selected = active
         reason = 'explicit scope correction; reuse subject only'
+        if v2:  # the corrected question still means the earlier task: rewrite it with the new scope
+            follow = True
     if (follow or edit) and selected is None:
         conflict = conflict or 'There is no unambiguous prior task or displayed answer for this reference.'
     selected_scope = selected['scope'] if selected else {}
@@ -140,8 +301,24 @@ def prepare_context(question: str, ui: dict, documents: list[dict], memory: dict
             if k=='document_id' and any(scope[n] and scope[n]!=inherit['scope'].get(n) for n in FIELDS[:2]):
                 continue
             if not scope[k] and inherit['scope'].get(k):
+                if v2 and k == 'product_version' and scope.get('versions'):
+                    continue
                 scope[k] = inherit['scope'][k]
                 provenance[k] = deepcopy(inherit['scope_provenance'].get(k, {}))
+        if v2 and not scope.get('versions') and inherit['scope'].get('versions') and 'product_version' not in origins:
+            scope['versions'] = list(inherit['scope']['versions'])
+            scope['product_version'] = None
+            provenance['versions'] = deepcopy(inherit['scope_provenance'].get('versions', {}))
+    if v2 and scope.get('product_id') and 'product_id' not in origins and not conflict:
+        # Product from an earlier turn: "What about version 36?" now names a version of that product.
+        found, _ = mentioned_versions(question, scope['product_id'], documents)
+        if len(found) == 1 and found[0] != str(scope.get('product_version')):
+            scope['product_version'], scope['document_id'] = found[0], None
+            scope.pop('versions', None)
+            provenance['product_version'] = {'origin': 'question', 'turn_id': None}
+        elif len(found) > 1:
+            scope['product_version'], scope['document_id'], scope['versions'] = None, None, found
+            provenance['versions'] = {'origin': 'question', 'turn_id': None}
     history = []
     if selected:
         for turn in selected['turns'][-max_turns:]:
@@ -158,7 +335,10 @@ def prepare_context(question: str, ui: dict, documents: list[dict], memory: dict
     subject = selected['subject'] if selected and (follow or returning or edit) else question[:max_chars]
     if selected and not follow and not returning and not edit and (len(query_terms & set(selected['terms'])) or reason.startswith('explicit scope correction')):
         subject = selected['subject']
-    if selected and scope!=selected_scope and scope.get('product_id') and scope.get('product_version'):
+    if v2 and selected and scope.get('versions') and scope != selected_scope:
+        subject = re.sub(rf"\b{re.escape(scope['product_id'])}\s+v?\d+(?:\.\d+)*", scope['product_id'] + ' ' +
+                         ' and '.join(scope['versions']), subject, flags=re.I)
+    elif selected and scope!=selected_scope and scope.get('product_id') and scope.get('product_version'):
         subject = re.sub(rf"\b{re.escape(scope['product_id'])}\s+v?\d+(?:\.\d+)*",
                          scope['product_id']+' '+str(scope['product_version']),subject,flags=re.I)
     return {'thread_id':thread_id, 'question':question, 'scope':scope, 'scope_provenance':provenance,

@@ -18,3 +18,10 @@ rules:
   - {category: negative, metric: unlabelled, max: 0}
   # Speed
   - {category: all, metric: p50_seconds, max_ratio: 1.2}
+  # Routing tier: never more answerable questions held back, never more searches of questions that need
+  # clarifying or editing, scope may slip by one case; a learned router must stay within 250 ms (median)
+  - {category: all, metric: false_clarify, max_rise: 0}
+  - {category: all, metric: wrong_direct,  max_rise: 0}
+  - {category: all, metric: route_ok,      max_drop: 1}
+  - {category: all, metric: scope_ok,      max_drop: 1}
+  - {category: all, metric: p50_ms,        max: 250}

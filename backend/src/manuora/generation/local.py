@@ -55,6 +55,9 @@ class TurnContext(TypedDict):
     retrieval_question: str | None
 
 
+CLARIFY_DEFAULT = ("I'm not sure what this refers to. Which product, feature or earlier answer do you mean?")
+
+
 class ManuoraGraphGenerator:
     def __init__(self, model:str, url:str, *, db_path: str = "", 
                  timeout_seconds: int = 180,
@@ -69,6 +72,9 @@ class ManuoraGraphGenerator:
                  system_prompt: str = None,
                  context_router_method: str = 'rules',
                  context_router_model_path: str | None = None,
+                 context_router_llm: dict | None = None,
+                 router_root: str | None = None,
+                 context_rules: str = 'v1',
                  max_evidence_passages: int = 5,
                  passage_char_limit: int | None = 850,
     ) -> None:
@@ -93,7 +99,16 @@ class ManuoraGraphGenerator:
         self.input_budget = context_window_tokens - max_output_tokens - safety_margin_tokens
         self.last_prompt_stats: dict[str, Any] = {}
         self._memory_lock = threading.RLock()
-        self.context_router = ContextRouter(context_router_method, context_router_model_path)
+        # classifier / llm (experiment R): the shared router plus its checks (generation/router.py); built on the
+        # first turn, when the document list is known. rules / tfidf: the original ContextRouter.
+        self.router_settings = {'context_router_method': context_router_method,
+                                'context_router_model_path': context_router_model_path,
+                                'context_router_llm': context_router_llm or {}}
+        self.router_root = router_root
+        self._router = None
+        self.context_router = (ContextRouter('rules') if context_router_method in ('classifier', 'llm')
+                               else ContextRouter(context_router_method, context_router_model_path))
+        self.context_rules = context_rules
         self.system_prompt = system_prompt or (
             "You are Manuora, a support assistant for product manuals. "
             "For factual product or workflow guidance, answer using ONLY the retrieved "
@@ -358,13 +373,17 @@ class ManuoraGraphGenerator:
         with self._memory_lock:
             state = self.graph.get_state({'configurable':{'thread_id':thread_id}})
             plan = prepare_context(question, ui_scope or {}, documents,
-                state.values.get('retrieval_memory', {}), thread_id=thread_id)
+                state.values.get('retrieval_memory', {}), thread_id=thread_id, rules=self.context_rules)
             plan['base_checkpoint'] = (state.config or {}).get('configurable',{}).get('checkpoint_id')
             replies = filter_messages(state.values.get('messages', []), include_types=[AIMessage])
             last = next((m for m in reversed(replies) if m.additional_kwargs.get('response_kind')), None)
             plan['last_displayed_reply'] = ({'content':str(last.content)[:1000],
                 'message_id':last.id, 'sources':last.additional_kwargs.get('sources',[]),
                 'truncated':len(str(last.content))>1000} if last else None)
+            # What a learned router reads: the page selection and the user's earlier messages in this thread.
+            plan['ui'] = dict(ui_scope or {})
+            plan['earlier'] = [str(m.content) for m in filter_messages(state.values.get('messages', []),
+                                                                       include_types=[HumanMessage])]
             return plan
 
     def validate_rewrite(self, context: dict, rewritten_question: str, *, documents: list[dict]) -> dict:
@@ -383,13 +402,20 @@ class ManuoraGraphGenerator:
         from time import perf_counter
         tick=perf_counter()
         context=context or self.prepare_retrieval_context(question,thread_id=thread_id,documents=documents,ui_scope=ui_scope)
-        decision=self.context_router.decide(context)
+        if self.router_settings['context_router_method'] in ('classifier', 'llm'):
+            decision, routed_query = self._shared_route(context, documents)
+        else:
+            decision, routed_query = self.context_router.decide(context), None
         result={**decision,'context':context,'query':question,'scope':context['scope'],
                 'rewrite_seconds':0.0,'rewrite_issues':[]}
         result['decision_seconds']=perf_counter()-tick
         if decision['action']=='edit_previous_answer' and not context.get('scope_conflict'):
             context['clarification']=None
-        if decision['action']=='contextual_rewrite':
+        if decision['action']=='contextual_rewrite' and routed_query:
+            # The router wrote the standalone question; it passes the same guard as the chat model's rewrite.
+            checked=self.validate_rewrite(context,routed_query,documents=documents)
+            result.update(query=checked['query'],rewrite_issues=checked['issues'],raw_rewrite=routed_query)
+        elif decision['action']=='contextual_rewrite':
             tick=perf_counter()
             try:
                 history=list(context['history'])
@@ -412,6 +438,36 @@ class ManuoraGraphGenerator:
                 result.update(query=context['fallback_query'],rewrite_issues=[type(exc).__name__],rewrite_error=str(exc))
             result['rewrite_seconds']=perf_counter()-tick
         return result
+
+    ACTIONS = {'direct': 'direct_retrieval', 'rewrite': 'contextual_rewrite', 'clarify': 'clarify',
+               'edit': 'edit_previous_answer', 'chat': 'chat'}
+
+    def _shared_route(self, context: dict, documents: list[dict]) -> tuple[dict, str | None]:
+        """The configured router's checked decision as this generator's action dict; the context's scope becomes
+        the decided one, so memory records what was searched."""
+        from manuora.generation.router import build_router, checked, route_with
+
+        with self._memory_lock:  # concurrent first turns build it once
+            if self._router is None:
+                self._router = build_router(self.router_settings, documents, self.router_root or '.')
+        decision = checked(route_with(self._router, context), context, documents)
+        if decision.action in ('direct', 'rewrite'):
+            scope = {'product_id': decision.product, 'product_version': None,
+                     'document_id': (context.get('scope') or {}).get('document_id')}
+            if len(decision.products) > 1:
+                scope['products'] = list(decision.products)
+            elif len(decision.versions) == 1:
+                scope['product_version'] = decision.versions[0]
+            elif len(decision.versions) > 1:
+                scope['versions'] = list(decision.versions)
+            context['scope'] = scope
+        reason = decision.reason
+        if decision.action == 'clarify' and not reason.endswith(('.', '?')):
+            # A learned router's own reason ("router model") is not for the user; the shared checks' reasons are.
+            reason = context.get('clarification') or CLARIFY_DEFAULT
+        return ({'action': self.ACTIONS[decision.action], 'reason': reason, 'method': decision.method,
+                 'confidence': decision.confidence},
+                decision.query if decision.action == 'rewrite' else None)
 
     def edit_previous_answer(self, instruction: str, *, context: dict) -> dict:
         """Rephrase existing content only; preserve its source IDs and citations."""

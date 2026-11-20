@@ -16,7 +16,8 @@ def test_graph_conversations_persist_isolate_and_survive_model_controls(monkeypa
     local = importlib.import_module("manuora.generation.local")
     configuration = dict(api.settings())
     configuration["conversation"] = dict(configuration["conversation"],
-        db_path="memory/chat.sqlite", summary_after_exchanges=8)
+        db_path="memory/chat.sqlite", summary_after_exchanges=8,
+        context_router_method="rules", context_rules="v1")  # these tests pin the original rules router
     monkeypatch.setattr(api, "settings", lambda: configuration)
     monkeypatch.setattr(api, "ROOT", tmp_path)
     hit = {"chunk_id": "one", "document_id": "guide", "product_id": "nextcloud",

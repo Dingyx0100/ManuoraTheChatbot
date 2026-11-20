@@ -89,6 +89,23 @@ class HybridRetriever:
                                'retrieval_query':request.query})
         return result
 
+    def search_versions(self, query: str, *, product_id: str | None, versions: list[str],
+                        document_id: str | None = None, candidates: int = 30) -> list[dict]:
+        """One search per version, interleaved by rank (first of each version, then second, ...).
+
+        A comparison question needs evidence from every version it names; a single search over all
+        versions lets the version with the most matching text fill the reranker's input.
+        """
+        lists = [self.search(query, product_id=product_id, product_version=version, document_id=document_id,
+                             candidates=candidates) for version in dict.fromkeys(versions)]
+        merged, seen = [], set()
+        for rank in range(max((len(hits) for hits in lists), default=0)):
+            for hits in lists:
+                if rank < len(hits) and hits[rank]["chunk_id"] not in seen:
+                    seen.add(hits[rank]["chunk_id"])
+                    merged.append(hits[rank])
+        return merged
+
     def search(self, query: str, *, product_id: str | None = None,
                product_version: str | None = None, document_id: str | None = None,
                candidates: int = 30) -> list[dict]:

@@ -26,7 +26,8 @@ GATES = ROOT / "eval/gates.yaml"
 
 def baseline_for(meta: dict) -> Path:
     return BASELINES / f"{meta['tier']}_{meta['split']}.json"
-SHOWN = ("packed_complete", "cited_complete", "answered", "declined", "made_up", "unlabelled", "p50_seconds")
+SHOWN = ("packed_complete", "cited_complete", "answered", "declined", "made_up", "unlabelled", "p50_seconds",
+         "route_ok", "false_clarify", "missed_clarify", "wrong_direct", "scope_ok", "needs_ok", "p50_ms")
 
 
 def load_side(path: Path) -> tuple[dict, list[dict]]:
@@ -97,7 +98,12 @@ def promote(run_dir: Path) -> None:
     """Write eval/baseline.json from a run: its meta and its public per-case records (no answer text)."""
     meta, records = load_side(run_dir)
     keep = ("id", "category", "expect", "private", "outcome", "kind", "seconds", "complete", "packed_recall",
-            "answered", "cited_complete", "declined", "label_key")
+            "answered", "cited_complete", "declined", "label_key",
+            # routing tier
+            "ms", "action", "expected", "product", "versions", "needs", "action_ok", "false_clarify",
+            "missed_clarify", "wrong_direct", "scope_ok", "needs_ok", "route_ok")
+    if meta.get("name", "").endswith("-drafts"):
+        raise SystemExit("A run that scored draft cases cannot become the baseline; rerun without --drafts.")
     public = [{k: r[k] for k in keep if k in r} for r in records if not r["private"]]
     target = baseline_for(meta)
     target.parent.mkdir(parents=True, exist_ok=True)

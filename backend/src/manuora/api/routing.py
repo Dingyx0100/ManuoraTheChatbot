@@ -5,8 +5,30 @@ from __future__ import annotations
 import re
 
 
-def early_response(question: str, assistant_name: str, product_ids: set[str]) -> str | None:
+GREETING_V2 = re.compile(r"^(?:hi|hello|hey|hiya|good (?:morning|afternoon|evening))\b[\s,!.]*"
+                         r"(?:there|everyone|all|manuora|again)?[\s,!.]*$")
+THANKS_V2 = re.compile(r"^(?:thanks|thank you|thx|ty|cheers|great,? thanks|ok,? thanks|perfect,? thanks)\b[^?]{0,40}$")
+
+
+# Only a message that asks what the latest version *is*; one that asks about something in the latest version
+# ("what changed between 28 and the latest version") goes to the router, which reads "latest" as the newest
+# version in the library (user decision 2026-11-20).
+WHICH_LATEST = re.compile(r"^(?:what|which)(?:'s| is)?(?: the)? (?:latest|newest|most recent|current)"
+                          r"(?: (?P<p1>\w+))? (?:version|release)(?: of(?: the)? (?P<p2>\w+))?$"
+                          r"|^is there an? (?:newer|new|later) (?:version|release)(?: of(?: the)? (?P<p3>\w+))?$")
+
+
+def early_response(question: str, assistant_name: str, product_ids: set[str], rules: str = "v1",
+                   newest: dict[str, str] | None = None) -> str | None:
     text = re.sub(r"[?!.\s]+$", "", question.casefold().strip())
+    if rules == "v2":
+        # Rules v2 (experiment R): greetings and thanks with a few extra words ("hi there!",
+        # "thanks, that helped a lot"), as long as they ask nothing and name no product.
+        names_product = any(re.search(rf"\b{re.escape(p)}\b", text) for p in product_ids)
+        if not names_product and GREETING_V2.match(text):
+            return f"Hello! I'm {assistant_name}. What can I help you find in the product manuals?"
+        if not names_product and "?" not in question and THANKS_V2.match(text):
+            return "You're welcome!"
     if text in {"what is your name", "what's your name", "who are you",
                 "tell me your name", "what should i call you"}:
         return f"I am {assistant_name}, a support assistant for product manuals."
@@ -30,10 +52,12 @@ def early_response(question: str, assistant_name: str, product_ids: set[str]) ->
         if not product_topic or (re.search(live_weather, text) and not re.search(support_action, text)):
             return "I don't have live weather information. I can help with questions about the product manuals here."
 
-    if (re.search(r"\b(latest|newest|current)\b", text)
-            and re.search(r"\b(version|release)\b", text)
-            and re.search(r"\b(what|which|is)\b", text)
-            and not re.search(r"\b(update|upgrade|install|configure|support|supported|compatible)\b", text)):
+    if (match := WHICH_LATEST.match(text)):
+        from manuora.api.grounding import PRODUCT_NAMES
+        product = next((p for p in (match.group("p1"), match.group("p2"), match.group("p3")) if p in product_ids), None)
+        if product and newest and newest.get(product):
+            return (f"The newest {PRODUCT_NAMES.get(product, product)} manual in this library is version "
+                    f"{newest[product]}. I can't tell from the manuals whether a newer release exists.")
         return "I can't verify the latest release from these manuals. I can help with a specific documented version."
     return None
 
@@ -56,25 +80,3 @@ def answer_lacks_support(answer: str) -> bool:
         r"\b(?:provide|mention|describe|explain|specify|contain|cover|show|verify|support|include)\b",
         text,
     )) or bool(re.search(r"\b(?:no mention|not mentioned|not enough information|insufficient evidence|can't verify|cannot verify)\b", text)))
-
-
-def resolve_scope(question: str, documents: list[dict], product_id: str | None,
-                  product_version: str | None) -> tuple[str | None, str | None, str | None]:
-    """Use an explicit product/version in the question unless it conflicts with the UI."""
-    text = question.casefold()
-    mentioned = [product for product in {row["product_id"] for row in documents}
-                 if re.search(rf"\b{re.escape(product.casefold())}\b", text)]
-    if len(mentioned) != 1:
-        return product_id, product_version, None
-    product = mentioned[0]
-    if product_id and product_id != product:
-        return product_id, product_version, "The selected product differs from the one in your question. Please choose which one you mean."
-    versions = {str(row["product_version"]) for row in documents
-                if row["product_id"] == product and row["product_version"]}
-    explicit = [version for version in versions if re.search(
-        rf"\b{re.escape(product.casefold())}\s+v?{re.escape(version.casefold())}\b", text)]
-    if len(explicit) == 1:
-        if product_version and product_version != explicit[0]:
-            return product, product_version, "The selected version differs from the one in your question. Please choose which version you mean."
-        return product, explicit[0], None
-    return product, product_version, None
