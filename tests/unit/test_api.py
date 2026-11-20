@@ -96,8 +96,76 @@ def test_chat_rejects_weak_evidence_and_only_shows_cited_sources(monkeypatch) ->
     assert strong["conversation_id"] == conversation_id
     assert [source["citation"] for source in strong["sources"]] == [1]
     assert strong["abstained"] is False and strong["kind"] == "answer"
+    # The UI shows what was searched under each reply, abstentions included.
+    assert strong["scope"] == weak["scope"] == {"products": ["nextcloud"], "versions": ["36"]}
     assert omitted["sources"] == [] and "can't verify" in omitted["answer"]
     assert omitted["abstained"] is True
+
+
+def _fake_pipeline(monkeypatch, api):
+    """A model-free turn that always answers "Use SMTP [1]." from one Nextcloud 36 passage; returns what was recorded."""
+    documents = [{"product_id": "nextcloud", "product_version": "36", "document_id": "guide"}]
+    monkeypatch.setattr(api, "options", lambda: {"documents": documents})
+    monkeypatch.setattr(api, "settings", lambda: {"assistant_name": "Manuora",
+        "retrieval": {"candidates_per_method": 30, "rerank_candidates": 12},
+        "evidence": {"max_passages": 4, "gate": "absolute", "minimum_score": 3.0,
+                     "relative_margin": None, "passage_char_limit": 850}})
+    hit = {"rerank_score": 6.0, "chunk_id": "1", "document_id": "guide", "product_id": "nextcloud",
+           "product_version": "36", "pages": [1], "headings": [], "text": "sample evidence", "retrievers": ["dense"]}
+    recorded = []
+
+    class Retriever:
+        def search(self, query, **filters): return [hit]
+
+    class Reranker:
+        def rerank(self, query, candidates, **kwargs): return [hit]
+
+    class Generator:
+        def draft_answer(self, question, evidence, **kwargs):
+            return {"answer": "Use SMTP [1].", "stats": {"evidence_count": 1}}
+        def prepare_retrieval_context(self, *args, **kwargs): return {}
+        def prepare_turn(self, question, **kwargs):
+            return {"action": "direct_retrieval", "query": question,
+                    "scope": {"product_id": "nextcloud", "product_version": "36", "document_id": None}}
+        def record_displayed_reply(self, question, answer, **kwargs): recorded.append(answer)
+        def close(self): pass
+
+    generator = Generator()
+    monkeypatch.setattr(api, "conversation_generator", lru_cache(maxsize=1)(lambda: generator))
+    monkeypatch.setattr(api, "pipeline", lru_cache(maxsize=1)(lambda: (Retriever(), Reranker(), generator)))
+    return recorded
+
+
+def test_chat_stream_reports_stages_then_the_checked_reply(monkeypatch) -> None:
+    import json
+    api = importlib.import_module("manuora.api.app")
+    recorded = _fake_pipeline(monkeypatch, api)
+    with TestClient(app) as client:
+        response = client.post("/api/chat/stream", json={"question": "Where is SMTP in Nextcloud 36?"})
+        events = [json.loads(line) for line in response.text.splitlines()]
+        plain = client.post("/api/chat", json={"question": "Where is SMTP in Nextcloud 36?"}).json()
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    assert [e["stage"] for e in events[:-1]] == ["route", "search", "rerank", "write", "check"]
+    final = events[-1]["reply"]
+    # Only stages stream; the reply is the same checked body /api/chat returns.
+    assert final["answer"] == plain["answer"] == "Use SMTP [1]." and final["sources"][0]["citation"] == 1
+    assert final["scope"] == {"products": ["nextcloud"], "versions": ["36"]}
+    assert recorded == ["Use SMTP [1].", "Use SMTP [1]."]
+
+
+def test_cancelled_turn_stops_at_the_next_stage_and_records_nothing(monkeypatch) -> None:
+    api = importlib.import_module("manuora.api.app")
+    recorded = _fake_pipeline(monkeypatch, api)
+    seen = []
+
+    def progress(stage):
+        if stage: seen.append(stage)
+        if stage == "write":
+            raise api.Cancelled
+
+    with pytest.raises(api.Cancelled):
+        api._chat(api.ChatRequest(question="Where is SMTP in Nextcloud 36?"), progress)
+    assert seen == ["route", "search", "rerank", "write"] and recorded == []
 
 
 def test_debug_trace_reports_stages_timings_and_outcome(monkeypatch) -> None:
@@ -293,6 +361,8 @@ def test_four_action_api_paths_share_rewrite_query_and_keep_edit_citations(memor
         count=len(payloads)
         clarify=ask('What does that button do?',str(uuid4()))
         assert clarify['routing']['action']=='clarify' and len(payloads)==count and len(searched)==before
+        # Only replies that searched the manuals carry a scope for the UI to show.
+        assert direct['scope']=={'products':['nextcloud'],'versions':['36']} and edited['scope'] is clarify['scope'] is None
         replies['rewrite']='Why is FreeCAD 0.16 limited to 2D?'
         rejected=ask('Where do I configure that?')
         assert rejected['routing']['rewrite_issues'] and searched[-1][0]==reranked[-1]

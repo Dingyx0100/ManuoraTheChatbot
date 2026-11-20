@@ -22,6 +22,7 @@ function route() {
     if (link.dataset.route === name) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
   });
   closeMenu();
+  if (name !== 'chat') closeViewer();
   Manuora.onRoute[name]?.();
   if (name === 'chat') question.focus({ preventScroll: true });
 }
@@ -84,7 +85,7 @@ function toast(text) {
 Manuora.toast = toast;
 
 // ---------------------------------------------------------------- scope chips
-const product = $('#product'), version = $('#version'), documentSelect = $('#document');
+const product = $('#product'), version = $('#version');
 const unique = values => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 const productName = id => Manuora.catalog.products[id] || id;
 const docTitle = id => Manuora.catalog.titles[id] || id;
@@ -96,13 +97,15 @@ function fill(select, values, allLabel, label = value => value) {
 }
 function updateScope() {
   const docs = Manuora.catalog.documents;
-  fill(version, unique(docs.filter(d => !product.value || d.product_id === product.value).map(d => d.product_version)),
-       'Any version', value => `v${value}`);
-  fill(documentSelect, unique(docs.filter(d => (!product.value || d.product_id === product.value) &&
-       (!version.value || d.product_version === version.value)).map(d => d.document_id)), 'All manuals', docTitle);
+  // Versions only mean something within one product: hide the chip until a product is chosen,
+  // and when that product has a single version there is nothing to choose.
+  // Newest first.
+  const versions = product.value ? unique(docs.filter(d => d.product_id === product.value).map(d => d.product_version)).reverse() : [];
+  fill(version, versions.length > 1 ? versions : [], 'Any version', value => `v${value}`);
+  version.parentElement.hidden = versions.length < 2;
   product.parentElement.classList.toggle('set', Boolean(product.value));
 }
-[product, version, documentSelect].forEach(select => select.addEventListener('change', updateScope));
+[product, version].forEach(select => select.addEventListener('change', updateScope));
 async function loadCatalog() {
   try {
     const data = await (await fetch('/api/options')).json();
@@ -171,38 +174,145 @@ const avatar = () => el('div', { className: 'avatar', innerHTML:
   '<svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true"><path d="M7 24V9l9 8 9-8v15" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>' });
 
 function userMessage(text, force) { return append(el('div', { className: 'msg-user', textContent: text }), force); }
-function answerBody(text, sourceCards) {
-  // Plain text with [n] citations turned into buttons that jump to source n.
-  const body = el('div', { className: 'answer' });
-  const parts = text.split(/(\[\d+\])/g);
-  for (const part of parts) {
-    const match = part.match(/^\[(\d+)\]$/);
-    const card = match && sourceCards.get(Number(match[1]));
-    if (card) {
-      body.append(el('button', { type: 'button', className: 'cite', textContent: match[1], title: 'Show source',
-        onclick: () => { card.open = true; card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                         card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 1200); } }));
-    } else body.append(part);
+// ---------------------------------------------------------------- answer formatting
+// A small Markdown subset (headings, lists, code, bold/italic/code spans) built as DOM nodes, never
+// innerHTML, so text from a manual cannot inject markup. [n] citations become buttons that jump to source n.
+function inline(text, sourceCards) {
+  const out = [];
+  const pattern = /(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|(?<![\w*])\*[^*\s][^*\n]*\*(?!\w)|(?<!\w)_[^_\s][^_\n]*_(?!\w)|\[\d+(?:\s*,\s*\d+)*\])/g;
+  let last = 0;
+  for (const match of text.matchAll(pattern)) {
+    if (match.index > last) out.push(text.slice(last, match.index));
+    const token = match[0];
+    if (token[0] === '`') out.push(el('code', { textContent: token.slice(1, -1) }));
+    else if (token.startsWith('**') || token.startsWith('__')) out.push(el('strong', {}, ...inline(token.slice(2, -2), sourceCards)));
+    else if (token[0] === '*' || token[0] === '_') out.push(el('em', {}, ...inline(token.slice(1, -1), sourceCards)));
+    else out.push(...citations(token, sourceCards));
+    last = match.index + token.length;
   }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+function citations(token, sourceCards) {
+  // "[2]" or "[1, 3]": a button per number that has a source; numbers without one stay as text.
+  const numbers = token.slice(1, -1).split(',').map(n => Number(n.trim()));
+  if (!numbers.some(n => sourceCards.has(n))) return [token];
+  return numbers.map(n => {
+    const card = sourceCards.get(n);
+    return card ? el('button', { type: 'button', className: 'cite', textContent: String(n), title: 'Show source',
+      onclick: () => { card.open = true; card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                       card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 1200); } })
+      : `[${n}]`;
+  });
+}
+function answerBody(text, sourceCards) {
+  const body = el('div', { className: 'answer' });
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  let paragraph = [], list = null;
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    const p = el('p');
+    paragraph.forEach((line, i) => { if (i) p.append(el('br')); p.append(...inline(line, sourceCards)); });
+    body.append(p); paragraph = [];
+  };
+  const closeList = () => { list = null; };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const fence = line.match(/^\s*```/);
+    if (fence) {
+      flushParagraph(); closeList();
+      const code = [];
+      while (++i < lines.length && !/^\s*```/.test(lines[i])) code.push(lines[i]);
+      body.append(el('pre', {}, el('code', { textContent: code.join('\n') })));
+      continue;
+    }
+    const heading = line.match(/^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/);
+    const item = line.match(/^(\s*)(?:([-*+•])|(\d+)[.)])\s+(.*)$/);
+    if (!line.trim()) { flushParagraph(); closeList(); }
+    else if (heading) {
+      flushParagraph(); closeList();
+      body.append(el(heading[1].length <= 2 ? 'h3' : 'h4', {}, ...inline(heading[2], sourceCards)));
+    } else if (item) {
+      flushParagraph();
+      const ordered = Boolean(item[3]), nested = item[1].length >= 2 && list;
+      const tag = ordered ? 'ol' : 'ul';
+      let target = list;
+      if (nested) {
+        // One level of nesting: an indented item goes into a sub-list of the previous item.
+        const parent = list.lastElementChild;
+        target = parent.lastElementChild?.tagName === tag.toUpperCase() ? parent.lastElementChild : parent.appendChild(el(tag));
+      } else if (!list || list.tagName !== tag.toUpperCase()) {
+        list = el(tag);
+        if (ordered && item[3] !== '1') list.start = Number(item[3]);
+        body.append(list); target = list;
+      }
+      target.append(el('li', {}, ...inline(item[4], sourceCards)));
+    } else if (list && /^\s{2,}\S/.test(line)) {
+      // A wrapped continuation of the last list item.
+      list.lastElementChild.append(' ', ...inline(line.trim(), sourceCards));
+    } else { closeList(); paragraph.push(line); }
+  }
+  flushParagraph();
   return body;
 }
+// ---------------------------------------------------------------- source page viewer
+// Wide screens show the cited PDF page beside the chat; narrower ones keep opening it in a new tab.
+const viewer = $('#viewer'), viewerFrame = $('#viewer-frame');
+const wideEnough = window.matchMedia('(min-width: 1100px)');
+let viewingCard = null;
+function openViewer(url, title, meta, card) {
+  viewer.hidden = false; app.classList.add('viewing');
+  $('#viewer-title').textContent = title; $('#viewer-meta').textContent = meta; $('#viewer-tab').href = url;
+  // Assign through about:blank so a new page in the same PDF still navigates the built-in viewer.
+  if (viewerFrame.src.split('#')[0] === new URL(url, location.href).href.split('#')[0]) viewerFrame.src = 'about:blank';
+  viewerFrame.src = `${url}&view=FitH&navpanes=0`;  // narrow panel: fit the width, no thumbnail sidebar
+  viewingCard?.classList.remove('viewing');
+  viewingCard = card; card.classList.add('viewing');
+}
+function closeViewer() {
+  if (viewer.hidden) return;
+  viewer.hidden = true; app.classList.remove('viewing'); viewerFrame.src = 'about:blank';
+  viewingCard?.classList.remove('viewing'); viewingCard = null;
+}
+$('#viewer-close').addEventListener('click', closeViewer);
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('#confirm').open) closeViewer(); });
+wideEnough.addEventListener('change', () => { if (!wideEnough.matches) closeViewer(); });
+
 function sourceCard(source) {
   const pages = source.pages?.length ? `p. ${source.pages.join(', ')}` : '';
   const versionLabel = source.product_version ? ` v${source.product_version}` : '';
   const params = new URLSearchParams({ product_id: source.product_id, product_version: source.product_version || '', document_id: source.document_id });
-  return el('details', { className: 'source' },
+  const page = source.pages?.[0] || 1, url = `/api/source?${params}#page=${page}`;
+  const meta = `${productName(source.product_id)}${versionLabel} · ${pages}`;
+  const card = el('details', { className: 'source' },
     el('summary', {},
       el('span', { className: 'num', textContent: `[${source.citation}]` }),
       el('span', { className: 'title', textContent: docTitle(source.document_id) }),
-      el('span', { className: 'meta', textContent: `${productName(source.product_id)}${versionLabel} · ${pages}` })),
+      el('span', { className: 'meta', textContent: meta })),
     source.headings?.length ? el('p', { className: 'path', textContent: source.headings.join(' › ') }) : null,
     el('p', { className: 'excerpt', textContent: source.preview || 'Passage kept from the earlier answer.' }),
-    el('a', { href: `/api/source?${params}#page=${source.pages?.[0] || 1}`, target: '_blank', rel: 'noopener', textContent: 'Open PDF at this page ↗' }));
+    el('a', { href: url, target: '_blank', rel: 'noopener', textContent: `Show page ${page}`,
+      onclick: event => {
+        if (!wideEnough.matches || event.ctrlKey || event.metaKey || event.shiftKey || event.button) return;  // new tab as usual
+        event.preventDefault();
+        openViewer(url, docTitle(source.document_id), meta, card);
+      } }));
+  return card;
 }
-function assistantMessage(text, sources = [], notice = false) {
+function scopeLabel(scope) {
+  // What the manuals were searched with, e.g. "KiCad v9.0", "KiCad v8.0 and v9.0", "KiCad, all versions".
+  const products = scope.products || [], versions = scope.versions || [];
+  if (!products.length) return 'all manuals';
+  const names = products.map(productName);
+  const list = items => items.length < 3 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+  if (products.length > 1) return list(names);
+  return versions.length ? `${names[0]} ${list(versions.map(v => `v${v}`))}` : `${names[0]}, all versions`;
+}
+function assistantMessage(text, sources = [], notice = false, scope = null) {
   const cards = new Map(sources.map(source => [source.citation, sourceCard(source)]));
   const content = el('div', {}, answerBody(text, cards));
   if (notice) content.firstChild.classList.add('notice');
+  if (scope) content.append(el('p', { className: 'searched', textContent: `Searched ${scopeLabel(scope)}` }));
   if (cards.size) content.append(el('div', { className: 'sources' },
     el('span', { className: 'sources-label', textContent: `${cards.size} source${cards.size > 1 ? 's' : ''}` }), ...cards.values()));
   return append(el('div', { className: 'msg-assistant' }, avatar(), content));
@@ -213,16 +323,22 @@ function render() {
   column.replaceChildren();
   for (const exchange of conversation.exchanges) {
     userMessage(exchange.question);
-    assistantMessage(exchange.answer, exchange.sources);
+    assistantMessage(exchange.answer, exchange.sources, false, exchange.scope);
   }
   thread.scrollTop = thread.scrollHeight;
   updateBottom();
 }
 
+const SEND_ICON = send.innerHTML;
+const STOP_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"/></svg>';
 function autosize() {
   question.style.height = 'auto';
   question.style.height = `${Math.min(question.scrollHeight, 220)}px`;
-  send.disabled = chatBusy || !question.value.trim();
+  // While a turn runs the send button is a Stop button.
+  send.disabled = chatBusy ? !inFlight : !question.value.trim();
+  send.innerHTML = chatBusy ? STOP_ICON : SEND_ICON;
+  send.classList.toggle('stop', chatBusy);
+  send.setAttribute('aria-label', chatBusy ? 'Stop' : 'Send');
 }
 question.addEventListener('input', autosize);
 question.addEventListener('keydown', event => {
@@ -232,39 +348,97 @@ question.addEventListener('keydown', event => {
 $('#new-chat').addEventListener('click', () => {
   if (chatBusy) return;
   conversation = fresh(); save();
+  closeViewer();
   question.value = ''; autosize();
   status.textContent = DEFAULT_HINT;
   location.hash = '#/chat';
   showWelcome(); question.focus();
 });
 
+// ---------------------------------------------------------------- asking
+// /api/chat/stream sends {"stage"} lines while the turn runs, then the checked {"reply"}. Only stages
+// stream: an answer is shown once it has passed the citation checks, never as a draft.
+const STAGES = [['route', 'Understanding'], ['search', 'Searching'], ['rerank', 'Ranking'], ['write', 'Writing'], ['check', 'Checking']];
+let inFlight = null;  // AbortController of the running turn
+function progressView() {
+  const steps = new Map(STAGES.map(([key, label]) => [key, el('li', { textContent: label })]));
+  const clock = el('span', { className: 'elapsed' });
+  const view = el('div', { className: 'progress', role: 'status', 'aria-live': 'polite' },
+    el('ol', {}, ...steps.values()), clock);
+  const started = performance.now();
+  const timer = setInterval(() => { clock.textContent = `${Math.round((performance.now() - started) / 1000)}s`; }, 1000);
+  return {
+    view,
+    stage(key) {
+      let reached = false;
+      for (const [name, item] of [...steps].reverse()) {
+        if (name === key) { reached = true; item.className = 'active'; }
+        else item.className = reached ? 'done' : '';
+      }
+      if (key === 'write' && !modelLoaded) steps.get('write').textContent = 'Loading model · Writing';
+    },
+    stop() { clearInterval(timer); },
+  };
+}
+async function* events(response) {
+  // NDJSON: one JSON object per line.
+  const reader = response.body.getReader(), decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const lines = buffer.split('\n'); buffer = lines.pop();
+    for (const line of lines) if (line.trim()) yield JSON.parse(line);
+    if (done) { if (buffer.trim()) yield JSON.parse(buffer); return; }
+  }
+}
+send.addEventListener('click', event => {
+  if (!chatBusy) return;
+  event.preventDefault();
+  inFlight?.abort();
+});
+
 $('#chat-form').addEventListener('submit', async event => {
   event.preventDefault();
   const text = question.value.trim();
   if (!text || chatBusy) return;
-  userMessage(text, true);
-  question.value = ''; chatBusy = true; autosize(); paintModel(modelState.textContent);
+  const asked = userMessage(text, true);
+  question.value = ''; chatBusy = true; inFlight = new AbortController(); autosize(); paintModel(modelState.textContent);
   $('#new-chat').disabled = true;
-  const pending = append(el('div', { className: 'msg-assistant' }, avatar(),
-    el('div', { className: 'thinking', role: 'status' }, el('span', { className: 'pulse', innerHTML: '<i></i><i></i><i></i>' }),
-      el('span', { textContent: modelLoaded ? 'Searching the manuals…' : 'Loading the model and searching the manuals…' }))), true);
+  const progress = progressView();
+  const pending = append(el('div', { className: 'msg-assistant' }, avatar(), progress.view), true);
+  progress.stage('route');
   try {
-    const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const response = await fetch('/api/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      signal: inFlight.signal,
       body: JSON.stringify({ question: text, product_id: product.value || null, product_version: version.value || null,
-                             document_id: documentSelect.value || null, conversation_id: conversation.id }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || 'Request failed');
+                             conversation_id: conversation.id }) });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || `Request failed (${response.status})`);
+    let data = null;
+    for await (const event of events(response)) {
+      if (event.stage) progress.stage(event.stage);
+      else if (event.reply) data = event.reply;
+      else if (event.error) throw new Error(event.error);
+    }
+    if (!data) throw new Error('The server ended the reply early');
     pending.remove();
-    assistantMessage(data.answer, data.sources, !data.sources.length);
+    assistantMessage(data.answer, data.sources, !data.sources.length, data.scope);
     conversation.id = data.conversation_id;
-    conversation.exchanges.push({ question: text, answer: data.answer, sources: data.sources });
+    conversation.exchanges.push({ question: text, answer: data.answer, sources: data.sources, scope: data.scope || null });
     save();
     status.textContent = DEFAULT_HINT;
   } catch (error) {
     pending.remove();
-    assistantMessage(`Sorry, that request failed: ${error.message}`, [], true);
+    if (error.name === 'AbortError') {
+      // Stopped: the server records nothing, so drop the question from the thread and hand it back for editing.
+      asked.remove();
+      if (!column.children.length) showWelcome();
+      question.value = text;
+      status.textContent = 'Stopped. Your question is back in the box. A reply already being written may keep the GPU busy for a moment.';
+    } else assistantMessage(`Sorry, that request failed: ${error.message}`, [], true);
   } finally {
-    chatBusy = false; autosize(); $('#new-chat').disabled = false; refreshModel(); question.focus();
+    progress.stop();
+    chatBusy = false; inFlight = null; autosize(); $('#new-chat').disabled = false; refreshModel(); question.focus();
   }
 });
 

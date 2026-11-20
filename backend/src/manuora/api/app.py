@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -16,7 +17,7 @@ from uuid import UUID, uuid4
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -300,6 +301,57 @@ def chat(request: ChatRequest) -> dict:
         return _chat(request)
 
 
+class Cancelled(Exception):
+    """The client went away mid-turn: stop at the next stage and record nothing."""
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(request: ChatRequest) -> StreamingResponse:
+    """The same turn as /api/chat, as NDJSON: {"stage": ...} lines while it runs, then {"reply": ...} or {"error": ...}.
+
+    Only stages stream, never draft text: every answer is checked after it is written, and a
+    draft the checks reject must not be shown. Closing the connection cancels the turn at the
+    next stage boundary without committing it to the conversation (a running generation finishes first).
+    """
+    loop = asyncio.get_running_loop()
+    events: asyncio.Queue = asyncio.Queue()
+    cancelled = threading.Event()
+
+    def emit(event: dict) -> None:
+        loop.call_soon_threadsafe(events.put_nowait, event)
+
+    def progress(stage: str | None) -> None:
+        if cancelled.is_set():
+            raise Cancelled
+        if stage:
+            emit({"stage": stage})
+
+    def work() -> None:
+        try:
+            with MODEL_LOCK:
+                emit({"reply": _chat(request, progress)})
+        except Cancelled:
+            emit({"cancelled": True})
+        except HTTPException as exc:
+            emit({"error": exc.detail})
+        except Exception as exc:  # surfaced to the client like /api/chat's 500, without a stack trace
+            emit({"error": f"{type(exc).__name__}: {exc}"})
+
+    threading.Thread(target=work, name="chat-stream", daemon=True).start()
+
+    async def lines():
+        try:
+            while True:
+                event = await events.get()
+                yield json.dumps(event) + "\n"
+                if "stage" not in event:
+                    return
+        finally:
+            cancelled.set()  # normal end: no-op; disconnect: the worker stops at its next stage
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+
 def _passages(hits: list[dict], char_limit: int | None = None) -> list[dict]:
     """What the trace keeps of a passage: enough to score it against gold (packed: the text the model sees)."""
     return [{"chunk_id": h.get("chunk_id"), "product_version": h.get("product_version"),
@@ -307,12 +359,15 @@ def _passages(hits: list[dict], char_limit: int | None = None) -> list[dict]:
              "rerank_score": h.get("rerank_score")} for h in hits]
 
 
-def _chat(request: ChatRequest) -> dict:
+def _chat(request: ChatRequest, progress=None) -> dict:
+    """One turn. `progress(stage)` is told when each stage starts and may raise to cancel; `progress(None)` only checks."""
     conversation_id = str(request.conversation_id)
+    step = progress or (lambda stage: None)
     generator = None
     context = None
     draft = None
     turn = None
+    searched = None  # the scope the manuals were searched with, once a search runs; shown under the reply
     # Passages per stage, seconds per step and why the reply ended the way it did.
     trace: dict = {"stages": {}, "seconds": {}, "outcome": None}
     clock = time.perf_counter()
@@ -324,13 +379,14 @@ def _chat(request: ChatRequest) -> dict:
         clock = now
 
     def reply(answer: str, sources: list | None = None, *, kind: str = 'answer', outcome: str | None = None) -> dict:
+        step(None)  # a cancelled turn is never recorded as displayed
         if not request.retrieval_only:
             generator.record_displayed_reply(request.question, answer, thread_id=conversation_id,
                 sources=sources or [], kind=kind, context=context, draft=draft)
         trace["outcome"] = outcome or kind
         body = {"answer": answer, "sources": sources or [],
                 "conversation_id": conversation_id,
-                "kind": kind, "abstained": kind == 'abstain',
+                "kind": kind, "abstained": kind == 'abstain', "scope": searched,
                 "routing":({k:turn.get(k) for k in ('action','method','reason','confidence','decision_seconds','rewrite_seconds','rewrite_issues')}
                            if turn else {'action':'chat','method':'early_rules'})}
         if request.debug:
@@ -339,6 +395,7 @@ def _chat(request: ChatRequest) -> dict:
         return body
 
     try:
+        step("route")
         documents = options()["documents"]
         generator = conversation_generator()
         context = generator.prepare_retrieval_context(request.question, thread_id=conversation_id,
@@ -368,14 +425,19 @@ def _chat(request: ChatRequest) -> dict:
             if hits:
                 return reply(version_reply(scope['product_id'], str(scope['product_version']), hits[0]),
                              kind='abstain', outcome='version_check')
+        step("search")
         with MODEL_LOCK:
             retriever, reranker, generator = pipeline()
         controls = settings()["retrieval"]
+        scope = turn['scope']
+        searched = {"products": [str(scope['product_id'])] if scope.get('product_id') else [],
+                    "versions": [str(scope['product_version'])] if scope.get('product_version') else []}
         candidates = retriever.search(
             turn['query'], **turn['scope'],
             candidates=controls["candidates_per_method"],
         )
         lap("retrieve")
+        step("rerank")
         ranked = reranker.rerank(
             turn['query'], candidates, limit=controls["rerank_candidates"],
             input_limit=controls["rerank_candidates"],
@@ -407,6 +469,7 @@ def _chat(request: ChatRequest) -> dict:
             used = generator.packed_count(request.question, evidence)
             trace["stages"]["packed"] = _passages(evidence[:used], char_limit)
             return reply("", kind='retrieval_only')
+        step("write")
         with MODEL_LOCK:
             draft = generator.draft_answer(request.question, evidence, thread_id=conversation_id,
                                            retrieval_question=turn['query'])
@@ -416,6 +479,7 @@ def _chat(request: ChatRequest) -> dict:
             used = draft['stats'].get("evidence_count", len(evidence))
             evidence = evidence[:used]
         lap("generate")
+        step("check")
         if request.debug:
             trace["stages"]["packed"] = _passages(evidence, char_limit)
             trace["draft"] = answer

@@ -137,10 +137,9 @@
     dialog.showModal();
   }
   function askAbout(job) {
-    const product = $('#product'), version = $('#version'), manual = $('#document');
+    const product = $('#product'), version = $('#version');
     product.value = job.product_id; product.dispatchEvent(new Event('change'));
     version.value = job.version || ''; version.dispatchEvent(new Event('change'));
-    manual.value = job.document_id || ''; manual.dispatchEvent(new Event('change'));
     location.hash = '#/chat';
   }
 
