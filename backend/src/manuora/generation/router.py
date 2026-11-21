@@ -119,6 +119,32 @@ def checked(decision: RouteDecision, context: dict, documents: list[dict]) -> Ro
     if decision.action in ("direct", "rewrite", "edit") and context.get("scope_conflict"):
         # The question names a product or version that disagrees with the page selection (explicit_scope).
         return RouteDecision("clarify", reason=str(context["scope_conflict"]), method=decision.method)
+    if decision.action in ("direct", "rewrite") and decision.method.startswith("llm"):
+        # A learned router can write a product id the library doesn't have (an invented one, for a manual it
+        # never saw). Use the product the rules found in the message or the page instead, else search every
+        # product; asking the user would be wrong, since they named nothing unknown.
+        fallback = (context.get("scope") or {}).get("product_id") or (context.get("ui") or {}).get("product_id")
+        fallback = fallback if fallback in products else None
+        if decision.products:
+            kept = [p for p in decision.products if p in products]
+            if len(kept) != len(decision.products):
+                decision.products = kept if len(kept) > 1 else []
+                decision.product = kept[0] if len(kept) == 1 else (decision.product or fallback)
+                decision.reason = f"{decision.reason}; unknown product dropped".lstrip("; ")
+        if decision.product and decision.product not in products:
+            decision.product, decision.versions = fallback, []
+            decision.reason = f"{decision.reason}; unknown product replaced".lstrip("; ")
+        # Likewise a product the message never names, against the page's selection: the selection wins (the rules
+        # already report a real conflict, a product named in the message, as scope_conflict above).
+        ui_product = (context.get("ui") or {}).get("product_id")
+        from manuora.api.grounding import PRODUCT_NAMES
+        named = lambda p: re.search(rf"\b({re.escape(p)}|{re.escape(PRODUCT_NAMES.get(p, p))})\b",  # noqa: E731
+                                    " ".join([context.get("question", "")] + earlier_messages(context)), re.I)
+        if (ui_product in products and decision.product and decision.product != ui_product
+                and not decision.products and not named(decision.product)):
+            selected = (context.get("ui") or {}).get("product_version")
+            decision.product, decision.versions = ui_product, [str(selected)] if selected else []
+            decision.reason = f"{decision.reason}; page selection kept".lstrip("; ")
     if decision.action in ("direct", "rewrite") and len(set(decision.products)) > 1:
         unknown = [p for p in decision.products if p not in products]
         if unknown:
@@ -310,6 +336,7 @@ message named it; else null. versions: the versions the user named or selected (
 
 
 def router_input(context: dict, catalog: dict[str, list[str]]) -> str:
+    catalog = context.get("catalog") or catalog  # an evaluation example may offer its own products
     ui = context.get("ui") or {}
     selected = " ".join(filter(None, [ui.get("product_id"), ui.get("product_version")])) or "nothing"
     earlier = earlier_messages(context)

@@ -1,4 +1,4 @@
-"""Start the router model (experiment R, F3) in llama-server, for conversation.context_router_method: llm.
+"""Start the router model in llama-server, for conversation.context_router_method: llm.
 
     python scripts/router/serve_router.py            # starts in the background, waits until healthy
     python scripts/router/serve_router.py --stop
@@ -18,7 +18,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-MODEL = ROOT / "data/models/router_qwen3-0.6b-v3_q8_0.gguf"
+MODEL = ROOT / "data/models/router_qwen3-0.6b-mix_q8_0.gguf"
 SERVER = Path(os.path.expanduser("~")) / ".docker/bin/inference/llama-server.exe"
 PID_FILE = ROOT / "data/models/router_server.pid"
 

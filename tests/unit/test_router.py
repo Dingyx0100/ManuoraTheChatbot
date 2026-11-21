@@ -243,7 +243,11 @@ def test_several_products_are_searched_not_clarified():
     assert (proposal.product, proposal.products) == (None, ["qgis", "nextcloud"])
     final = checked(proposal, {"question": "q"}, DOCS)
     assert (final.action, final.products, final.versions, final.needs) == ("direct", ["qgis", "nextcloud"], [], ["q"])
-    assert checked(parse_decision('{"action": "direct", "product": ["qgis", "blender"]}'), {"question": "q"}, DOCS).action == "clarify"
+    # A learned router's unknown product is dropped, not clarified (the user named nothing unknown).
+    kept = checked(parse_decision('{"action": "direct", "product": ["qgis", "blender"]}'), {"question": "q"}, DOCS)
+    assert (kept.action, kept.product, kept.products) == ("direct", "qgis", [])
+    # A rules decision with an unknown product still clarifies.
+    assert checked(RouteDecision("direct", "blender", []), {"question": "q"}, DOCS).action == "clarify"
     # A one-item list is just that product.
     single = checked(parse_decision('{"action": "direct", "product": ["kicad"], "versions": ["9"]}'), {"question": "q"}, DOCS)
     assert (single.product, single.products, single.versions) == ("kicad", [], ["9"])
@@ -307,3 +311,27 @@ def test_a_checkout_without_trained_models_still_routes(tmp_path):
     assert isinstance(build_router({"context_router_method": "classifier",
                                     "context_router_model_path": "data/models/missing.joblib"}, DOCS, tmp_path),
                       ContextRouter)
+
+
+def test_a_learned_routers_invented_product_falls_back_to_what_the_rules_found():
+    proposal = lambda: RouteDecision("direct", product="madeupsuite", versions=["2"], method="llm_llamacpp")  # noqa: E731
+    # The rules found the product in the message: that one, with the versions the message names.
+    context = {"question": "How do I route tracks in KiCad 8?", "scope": {"product_id": "kicad"}}
+    decision = checked(proposal(), context, DOCS)
+    assert (decision.action, decision.product, decision.versions) == ("direct", "kicad", ["8"])
+    # The page selected a product: that one.
+    decision = checked(proposal(), {"question": "How do I plan it?", "ui": {"product_id": "nextcloud"}}, DOCS)
+    assert (decision.action, decision.product) == ("direct", "nextcloud")
+    # Nothing known: search every product rather than ask.
+    decision = checked(proposal(), {"question": "How do I plan a route?"}, DOCS)
+    assert (decision.action, decision.product, decision.versions) == ("direct", None, [])
+
+
+def test_a_learned_routers_unnamed_product_gives_way_to_the_page_selection():
+    ui = {"product_id": "kicad", "product_version": "9"}
+    proposal = RouteDecision("direct", product="nextcloud", versions=[], method="llm_llamacpp")
+    decision = checked(proposal, {"question": "How do I add a footprint?", "ui": ui}, DOCS)
+    assert (decision.action, decision.product, decision.versions) == ("direct", "kicad", ["9"])
+    # Named in the message: a real disagreement, still clarified.
+    proposal = RouteDecision("direct", product="nextcloud", versions=[], method="llm_llamacpp")
+    assert checked(proposal, {"question": "How do I share files in Nextcloud?", "ui": ui}, DOCS).action == "clarify"

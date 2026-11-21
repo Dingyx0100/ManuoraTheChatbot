@@ -105,10 +105,50 @@ in the library (the answer says which).
   `context_router_llm.fallback_classifier` routes instead. Without that file, the rules route.
 - `rules` with `context_rules: v1`: the original rules router, no model files needed.
 
-The trained router models are not in the repository. `scripts/router/` holds the scripts that generate the
-synthetic routing data and train the classifiers and the LoRA router. Every router's decision passes the same
-checks: products and versions must exist, a page selection can't contradict the question, and an edit needs an
-answer on screen.
+Every router's decision passes the same checks (`generation/router.py`, `checked`):
+
+- Products and versions must exist in the library, and a product named in the question can't contradict the
+  page selection.
+- An edit needs an answer on screen; otherwise the router asks.
+- For the learned router: a version the message names is kept even if the model dropped it, a product with one
+  version gets that version, and a product id the library doesn't have, or one the message never names against
+  the page selection, gives way to the product the rules found or the page selected.
+
+The trained models are not in the repository yet.
+
+#### How the router was trained
+
+The router writes one JSON decision (`action`, `product`, `versions`, `needs`, `query`) for a prompt that lists
+the library's products and versions, the page selection, whether an answer is on screen, the user's last two
+messages, and the new message.
+
+**Training data** (`scripts/router/build_mix.py`, about 2,800 training and 350 validation examples). It's built so
+the weights can be shared:
+
+| Source | What it gives | Licence |
+|---|---|---|
+| Synthetic messages written by Qwen3-8B from Nextcloud manual passages (`generate_data.py`) | all actions with products and versions: single and multi-step questions, version comparisons and corrections, follow-ups, edits, topic switches, several products, version formats and replies | Nextcloud documentation, CC BY 3.0 |
+| Synthetic messages written from no manual | greetings, complaints about the assistant, references to something never named | — |
+| Messages about 8 invented products (`fictional_products.py`, then `generate_data.py --fictional`) | the same scenarios as the Nextcloud set, on products with one or many versions and varied version formats; each example carries its own product list | invented by Qwen3-8B |
+| [CANARD](https://sites.google.com/view/qanta/projects/canard) | follow-up rewrites, standalone follow-ups, first questions, and follow-ups without their history (clarify) | CC BY-SA 4.0 |
+| [QReCC](https://github.com/apple/ml-qrecc), Natural Questions conversations only | the same roles | CC BY-SA 3.0 |
+| [CLINC150](https://github.com/clinc/oos-eval), small-talk intents only | chat | CC BY 3.0 |
+
+Public data is converted by `external_data.py`: one turn per conversation, a cap per source and action, each
+dataset's dev split for validation and its test split never trained on, and at most 40% of training. QGIS-derived
+messages are left out of training (the QGIS manuals are GFDL) and used as a test instead. Qwen3-8B and
+Qwen3-0.6B-Base are Apache 2.0.
+
+**Training** (`train_lora.py`): LoRA (r 16, alpha 32, attention and MLP) on Qwen3-0.6B-Base, loss on the JSON only,
+effective batch 16, learning rate 2e-4, best epoch on validation. `merge_lora.py` merges the adapter, and
+llama.cpp's `convert_hf_to_gguf.py` writes the Q8_0 GGUF that llama-server runs. The fallback classifier
+(`train_classifier.py --method tfidf`) is trained on the same data.
+
+**Evaluation** (`python -m manuora.evaluation.run --tier routing`, and the routing-only arms of the experiment):
+tests no training row comes from: KiCad and FreeCAD messages, typo-styled messages, a separately generated set
+with new wording, QGIS messages, 60 hand-written messages, and the public datasets' test splits. On the
+benchmark's dev routing cases it routes 204 of 207 correctly, at about 125 ms per message on an RTX 5060 Ti with
+the 8B chat model loaded.
 
 ## Testing and releases
 

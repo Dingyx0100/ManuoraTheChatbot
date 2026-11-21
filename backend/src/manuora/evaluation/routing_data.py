@@ -32,13 +32,22 @@ def as_case(example: dict) -> dict:
                       "needs": "many" if len(lab.get("needs") or []) >= 2 else "one"}}
 
 
+def docs_for(example: dict, documents: list[dict]) -> list[dict]:
+    """The products the example's chat page offers: its own `catalog` ({product: [versions]}, used for invented
+    products) or the library's documents."""
+    catalog = example.get("catalog")
+    if not catalog:
+        return documents
+    return [{"product_id": p, "product_version": str(v), "document_id": f"{p}-{v}"} for p, vs in catalog.items() for v in vs]
+
+
 def final_context(example: dict, documents: list[dict], rules: str = "v2") -> dict | None:
     """The context the router sees for the example's message (earlier turns routed by the v2 rules).
     None when an early reply (greeting, thanks) answers it before any router runs."""
     from manuora.evaluation.run import replay
     from manuora.generation.context import ContextRouter
 
-    context, _ = replay(as_case(example), documents, ContextRouter("rules"), rules)(example["question"])
+    context, _ = replay(as_case(example), docs_for(example, documents), ContextRouter("rules"), rules)(example["question"])
     return context
 
 
@@ -72,7 +81,7 @@ def evaluate(examples: list[dict], conversation: dict, documents: list[dict], ro
     rules = conversation.get("context_rules", "v1")
     records = []
     for e in examples:
-        record = route_case(as_case(e), documents, router, rules)
+        record = route_case(as_case(e), docs_for(e, documents), router, rules)
         record.update(split=e["split"], style=e["style"])
         records.append(record)
     return records

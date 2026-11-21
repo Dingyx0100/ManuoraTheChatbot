@@ -606,6 +606,9 @@ def main() -> None:
     parser.add_argument("--phrasing", metavar="TRAIN_SET",
                         help="write the test_phrasing split: prompts without example phrases, a different persona, "
                              "and nothing with TF-IDF cosine >= 0.7 to a question of TRAIN_SET's train split")
+    parser.add_argument("--fictional", metavar="DIR",
+                        help="seed from invented products (fictional_products.py output) instead of the manuals; each "
+                             "example carries that catalog; no unseen-product split")
     args = parser.parse_args()
     system = PHRASING_SYSTEM if args.phrasing else SYSTEM
 
@@ -615,9 +618,21 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=False)
     rng = random.Random(args.seed)
     sqlite_path = ROOT / settings()["sparse_index"]
-    docs = [d for d in documents(sqlite_path) if d["product_id"] in TRAIN_PRODUCTS + UNSEEN_PRODUCTS]
-    seen_pool = load_sections(sqlite_path, docs, TRAIN_PRODUCTS)
-    unseen_pool = load_sections(sqlite_path, docs, UNSEEN_PRODUCTS)
+    catalog = None
+    if args.fictional:
+        meta = json.loads((Path(args.fictional) / "catalog.json").read_text(encoding="utf-8"))
+        catalog = meta["catalog"]
+        PRODUCT_NAMES.update(meta["names"])  # display names for the prompts and the observable() check
+        docs = [{"product_id": p, "product_version": v, "document_id": f"{p}_manual_{v}"}
+                for p, vs in catalog.items() for v in vs]
+        seen_pool = [json.loads(line) for line in (Path(args.fictional) / "sections.jsonl").read_text(
+            encoding="utf-8").splitlines() if line.strip()]
+        unseen_pool = []
+        args.unseen_share = 0.0
+    else:
+        docs = [d for d in documents(sqlite_path) if d["product_id"] in TRAIN_PRODUCTS + UNSEEN_PRODUCTS]
+        seen_pool = load_sections(sqlite_path, docs, TRAIN_PRODUCTS)
+        unseen_pool = load_sections(sqlite_path, docs, UNSEEN_PRODUCTS)
     everything = seen_pool + unseen_pool
     by_key: dict = {}
     for s in everything:
@@ -665,6 +680,8 @@ def main() -> None:
                     key = "|".join(e["seed"]) or e["question"]
                     e = observable(e)
                     e["label"]["needs"] = [n for n in e["label"]["needs"] if len(n.split()) <= 12] or e["label"]["needs"][:1]
+                    if catalog:
+                        e["catalog"] = catalog
                     e.update(scenario=scenario, style=style,
                              split="test_phrasing" if args.phrasing else split_of(unseen, style, key))
                     if args.phrasing:

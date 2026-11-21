@@ -97,7 +97,7 @@ def replay(case: dict, documents: list[dict], router, rules: str = "v1", assista
     """
     from manuora.api.routing import early_response
     from manuora.generation.context import prepare_context, remember_reply
-    from manuora.generation.router import chat_decision, checked, route_with
+    from manuora.generation.router import chat_decision, checked, known_versions, route_with
 
     products = {d["product_id"] for d in documents}
     ui = bench.ui_of(case)
@@ -110,6 +110,7 @@ def replay(case: dict, documents: list[dict], router, rules: str = "v1", assista
         context["last_displayed_reply"] = state["last"]
         context["ui"] = ui
         context["earlier"] = list(state["earlier"])
+        context["catalog"] = known_versions(documents)  # what a learned router is told the page offers
         return context, checked(route_with(router, context), context, documents)
 
     for turn, earlier in enumerate(h for h in case.get("history") or [] if h.get("role") == "user"):
